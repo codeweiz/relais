@@ -82,6 +82,8 @@ async fn handle_terminal(socket: WebSocket, state: AppState, session_id: String)
     let mut live_rx = session.subscribe();
     let mut status_rx = session.subscribe_status();
 
+    let mut got_initial_resize = false;
+
     // Heartbeat: ping every 30 seconds
     let mut ping_interval = interval(Duration::from_secs(30));
     // Skip the first immediate tick
@@ -111,9 +113,17 @@ async fn handle_terminal(socket: WebSocket, state: AppState, session_id: String)
                                 if let Err(e) = state.core.pty_manager.resize(&session_id, cols, rows) {
                                     warn!(session_id = %session_id, error = %e, "failed to resize PTY");
                                 }
-                                // No capture-pane on connect. The resize triggers
-                                // SIGWINCH in tmux, which causes the running application
-                                // to redraw at the correct dimensions via the PTY stream.
+                                // After first resize, wait for tmux to re-render
+                                // then send capture-pane at correct dimensions.
+                                if !got_initial_resize {
+                                    got_initial_resize = true;
+                                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                                    if let Ok(initial) = relais_core::pty::tmux::capture_pane(&session_id) {
+                                        if !initial.is_empty() {
+                                            let _ = ws_tx.send(Message::Binary(initial.into())).await;
+                                        }
+                                    }
+                                }
                             }
                             Ok(ClientCommand::Keepalive { .. }) => {
                                 let ack = serde_json::json!({
