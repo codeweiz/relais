@@ -46,8 +46,9 @@ class TerminalConnection {
     );
   }
 
+  /// Send raw input bytes to terminal PTY (must be binary frame).
   void sendInput(String data) {
-    _channel?.sink.add(data);
+    _channel?.sink.add(utf8.encode(data));
   }
 
   void resize(int cols, int rows) {

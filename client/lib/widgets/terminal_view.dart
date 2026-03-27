@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:xterm/xterm.dart';
 import '../services/terminal_connection.dart';
 
@@ -50,9 +51,9 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
           child: TerminalView(
             _terminal,
             key: _terminalKey,
-            textStyle: const TerminalStyle(
+            textStyle: TerminalStyle(
               fontSize: 14,
-              fontFamily: 'JetBrains Mono, Menlo, Monaco, Consolas, monospace',
+              fontFamily: GoogleFonts.jetBrainsMono().fontFamily ?? 'monospace',
             ),
             theme: const TerminalTheme(
               cursor: Color(0xFFc9d1d9),
