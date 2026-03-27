@@ -20,8 +20,7 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
   @override
   void initState() {
     super.initState();
-    // scrollback: 0 — let tmux handle scrollback, not the client
-    _terminal = Terminal(maxLines: 0);
+    _terminal = Terminal(maxLines: 1000);
 
     // Keyboard input → server (binary)
     _terminal.onOutput = (data) {
