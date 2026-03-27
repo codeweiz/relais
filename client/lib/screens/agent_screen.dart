@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../models/session.dart';
+import '../models/slash_command.dart';
 import '../providers/server_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/agent_provider.dart';
 import '../widgets/agent_chat.dart';
 import '../widgets/session_switcher.dart';
+import '../widgets/slash_command_menu.dart';
 import '../l10n/strings.dart';
 
 class AgentScreen extends ConsumerStatefulWidget {
@@ -24,6 +26,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   AgentSession? _session;
   final _speech = stt.SpeechToText();
   bool _isListening = false;
+  final _layerLink = LayerLink();
+  final _menuController = SlashCommandMenuController();
+  bool _showingMenu = false;
 
   @override
   void initState() {
@@ -56,7 +61,61 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     });
   }
 
+  void _onInputChanged(String text) {
+    final session = _session;
+    if (session == null) return;
+
+    if (text.startsWith('/') && !text.contains(' ')) {
+      final filter = text.substring(1);
+      final commands = session.availableCommands;
+      if (commands == null) return;
+
+      if (!_showingMenu) {
+        _showingMenu = true;
+        _menuController.show(
+          context: context,
+          layerLink: _layerLink,
+          commands: commands,
+          filter: filter,
+          onSelect: _onCommandSelected,
+          onDismiss: _onMenuDismissed,
+        );
+      } else {
+        _menuController.updateFilter(
+          context: context,
+          layerLink: _layerLink,
+          commands: commands,
+          filter: filter,
+          onSelect: _onCommandSelected,
+          onDismiss: _onMenuDismissed,
+        );
+      }
+    } else {
+      _dismissMenu();
+    }
+  }
+
+  void _onCommandSelected(SlashCommand cmd) {
+    _inputController.text = '/${cmd.name} ';
+    _inputController.selection = TextSelection.collapsed(
+      offset: _inputController.text.length,
+    );
+    _showingMenu = false;
+  }
+
+  void _onMenuDismissed() {
+    _showingMenu = false;
+  }
+
+  void _dismissMenu() {
+    if (_showingMenu) {
+      _menuController.dismiss();
+      _showingMenu = false;
+    }
+  }
+
   void _sendMessage() {
+    _dismissMenu();
     final text = _inputController.text.trim();
     if (text.isEmpty || _session == null) return;
 
@@ -106,6 +165,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     _session?.removeListener(_onUpdate);
     _inputController.dispose();
     _scrollController.dispose();
+    _menuController.dismiss();
     super.dispose();
   }
 
@@ -171,17 +231,21 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: TextField(
-                      controller: _inputController,
-                      decoration: InputDecoration(
-                        hintText: S.sendMessage,
-                        border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        isDense: true,
+                    child: CompositedTransformTarget(
+                      link: _layerLink,
+                      child: TextField(
+                        controller: _inputController,
+                        decoration: InputDecoration(
+                          hintText: S.sendMessage,
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          isDense: true,
+                        ),
+                        onChanged: _onInputChanged,
+                        onSubmitted: (_) => _sendMessage(),
+                        textInputAction: TextInputAction.send,
                       ),
-                      onSubmitted: (_) => _sendMessage(),
-                      textInputAction: TextInputAction.send,
                     ),
                   ),
                   const SizedBox(width: 4),
