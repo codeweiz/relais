@@ -1,11 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../models/session.dart';
 import '../providers/server_provider.dart';
-import '../services/agent_connection.dart';
-import '../models/agent_message.dart';
+import '../providers/agent_provider.dart';
 import '../widgets/agent_chat.dart';
 import '../widgets/session_switcher.dart';
 import '../l10n/strings.dart';
@@ -19,71 +17,27 @@ class AgentScreen extends ConsumerStatefulWidget {
 }
 
 class _AgentScreenState extends ConsumerState<AgentScreen> {
-  AgentConnection? _connection;
-  final _messages = <AgentMessage>[];
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
-  String _status = 'connecting';
-  bool _waiting = false;
-  StreamSubscription? _messageSub;
-  StreamSubscription? _statusSub;
+  AgentSession? _session;
 
   @override
   void initState() {
     super.initState();
     final server = ref.read(serverProvider).server;
     if (server != null) {
-      _connection = AgentConnection(
+      _session = ref.read(agentSessionManagerProvider).getOrCreate(
+        sessionId: widget.sessionId,
         baseUrl: server.url,
         token: server.token,
-        sessionId: widget.sessionId,
       );
-
-      _messageSub = _connection!.messages.listen((msg) {
-        if (!mounted) return;
-
-        // Ephemeral types: only show during response, removed on turn_complete
-        const ephemeral = {
-          AgentMessageType.toolUse,
-          AgentMessageType.toolResult,
-          AgentMessageType.progress,
-          AgentMessageType.thinking,
-        };
-
-        if (msg.type == AgentMessageType.turnComplete) {
-          setState(() {
-            _waiting = false;
-            // Remove all ephemeral messages from this turn
-            _messages.removeWhere((m) => ephemeral.contains(m.type));
-          });
-          return;
-        }
-
-        setState(() {
-          // First agent text → stop waiting
-          if (msg.type == AgentMessageType.text) _waiting = false;
-
-          if (msg.type == AgentMessageType.text && msg.streaming) {
-            final idx = _messages.indexWhere((m) => m.id == msg.id);
-            if (idx >= 0) {
-              _messages[idx] = msg;
-            } else {
-              _messages.add(msg);
-            }
-          } else {
-            _messages.add(msg);
-          }
-        });
-        _scrollToBottom();
-      });
-
-      _statusSub = _connection!.status.listen((s) {
-        if (!mounted) return;
-        setState(() => _status = s);
-      });
-
-      _connection!.connect();
+      _session!.addListener(_onUpdate);
     }
+  }
+
+  void _onUpdate() {
+    if (mounted) setState(() {});
+    _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -100,21 +54,16 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   void _sendMessage() {
     final text = _inputController.text.trim();
-    if (text.isEmpty || _connection == null) return;
+    if (text.isEmpty || _session == null) return;
 
-    // Don't add locally — server echoes back as user_message,
-    // which also survives history replay on re-enter.
-    setState(() => _waiting = true);
-    _connection!.sendMessage(text);
+    _session!.sendMessage(text);
     _inputController.clear();
     _scrollToBottom();
   }
 
   @override
   void dispose() {
-    _messageSub?.cancel();
-    _statusSub?.cancel();
-    _connection?.dispose();
+    _session?.removeListener(_onUpdate);
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -122,9 +71,11 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_connection == null) {
+    if (_session == null) {
       return Scaffold(body: Center(child: Text(S.notConnected)));
     }
+
+    final session = _session!;
 
     return Scaffold(
       appBar: AppBar(
@@ -142,8 +93,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                 height: 8,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color:
-                      _status == 'connected' ? Colors.green : Colors.orange,
+                  color: session.status == 'connected'
+                      ? Colors.green
+                      : Colors.orange,
                 ),
               ),
             ),
@@ -153,20 +105,19 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       body: Column(
         children: [
           Expanded(
-            child: _messages.isEmpty
+            child: session.messages.isEmpty && !session.waiting
                 ? Center(
                     child: Text(S.sendHint,
                         style: Theme.of(context)
                             .textTheme
                             .bodyLarge
                             ?.copyWith(
-                                color:
-                                    Theme.of(context).colorScheme.outline)),
+                                color: Theme.of(context).colorScheme.outline)),
                   )
                 : AgentChat(
-                    messages: _messages,
+                    messages: session.messages,
                     scrollController: _scrollController,
-                    waiting: _waiting,
+                    waiting: session.waiting,
                   ),
           ),
           Container(
@@ -183,7 +134,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       decoration: InputDecoration(
                         hintText: S.sendMessage,
                         border: const OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
+                        contentPadding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
                         isDense: true,
                       ),
