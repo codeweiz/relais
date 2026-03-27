@@ -82,11 +82,6 @@ async fn handle_terminal(socket: WebSocket, state: AppState, session_id: String)
     let mut live_rx = session.subscribe();
     let mut status_rx = session.subscribe_status();
 
-    // Wait for the client's first resize command before sending capture-pane.
-    // This ensures tmux has the correct dimensions so the captured content
-    // matches the client's terminal width and won't appear garbled.
-    let mut got_initial_resize = false;
-
     // Heartbeat: ping every 30 seconds
     let mut ping_interval = interval(Duration::from_secs(30));
     // Skip the first immediate tick
@@ -116,16 +111,9 @@ async fn handle_terminal(socket: WebSocket, state: AppState, session_id: String)
                                 if let Err(e) = state.core.pty_manager.resize(&session_id, cols, rows) {
                                     warn!(session_id = %session_id, error = %e, "failed to resize PTY");
                                 }
-                                // After the first resize, force tmux to redraw at the
-                                // correct dimensions. This sends fresh screen content
-                                // through the PTY stream, fixing any garbled capture-pane.
-                                if !got_initial_resize {
-                                    got_initial_resize = true;
-                                    let session_name = format!("relais-{}", session_id);
-                                    let _ = std::process::Command::new("tmux")
-                                        .args(["refresh-client", "-t", &session_name])
-                                        .output();
-                                }
+                                // No capture-pane on connect. The resize triggers
+                                // SIGWINCH in tmux, which causes the running application
+                                // to redraw at the correct dimensions via the PTY stream.
                             }
                             Ok(ClientCommand::Keepalive { .. }) => {
                                 let ack = serde_json::json!({
