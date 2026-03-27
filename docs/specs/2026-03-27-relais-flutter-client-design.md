@@ -1,23 +1,25 @@
-# Relais — Flutter RTB Client
+# Relais — Remote Terminal & AI Agent Client
 
 **Date:** 2026-03-27
 **Status:** Approved
 
 ## Overview
 
-Relais is a cross-platform Flutter client for RTB (Remote Terminal Bridge). It connects to one or more RTB servers via REST API and WebSocket, providing terminal access and AI agent interaction.
+Relais is an independent, cross-platform client for remote terminal access and AI agent interaction. It connects to backend servers via REST API and WebSocket.
 
-**Principle:** Flutter handles ALL client-side concerns. Rust handles ALL server-side concerns. No overlap.
+Relais is a standalone product with its own identity, not a frontend for any specific backend project. The server-side protocol is documented below; any compatible server implementation works.
+
+**Principle:** Relais handles ALL client-side concerns. Server handles ALL server-side concerns. Clean separation, no overlap.
 
 ## Architecture
 
 ```
-Flutter Client (relais)              Rust Server (rtb-cli)
+Relais (Flutter Client)              Server (any compatible impl)
 ┌────────────────────────┐           ┌────────────────────────┐
 │ iOS / Android / macOS  │  REST +   │ Linux / macOS / Docker │
 │ Windows / Web          │◄─────────►│                        │
-│                        │ WebSocket │ PTY / Agent / Plugin   │
-│ Scan QR or enter URL   │           │ Tunnel / Notification  │
+│                        │ WebSocket │ Terminal / AI Agent     │
+│ Scan QR or enter URL   │           │ Plugins / Tunnel       │
 │ to connect             │           │                        │
 └────────────────────────┘           └────────────────────────┘
 ```
@@ -32,7 +34,14 @@ Flutter Client (relais)              Rust Server (rtb-cli)
 | Windows | Flutter Windows desktop |
 | Web | Flutter Web |
 
-Linux desktop is NOT a target — Linux users run `rtb-cli` (server) and connect via mobile/web/other desktop.
+## Design System
+
+**Material 3** with `useMaterial3: true`:
+- Dynamic color (Material You) where supported
+- M3 elevation, shapes, and typography
+- `ColorScheme.fromSeed()` for consistent theming
+- Adaptive layout: `NavigationBar` (mobile), `NavigationRail` (tablet), `NavigationDrawer` (desktop)
+- M3 components: `FilledButton`, `SearchBar`, `SegmentedButton`, `Card.filled`, etc.
 
 ## Features
 
@@ -41,49 +50,49 @@ Linux desktop is NOT a target — Linux users run `rtb-cli` (server) and connect
 1. **Server Connection**
    - Enter server URL + token manually
    - Scan QR code (camera on mobile, paste on desktop)
-   - Save multiple servers, quick switch
-   - Connection status indicator
+   - Save multiple servers with friendly names
+   - Connection status indicator (M3 badge)
    - Auto-reconnect on disconnect
 
 2. **Session List**
-   - List all sessions (terminal + agent) from `GET /api/v1/sessions`
+   - List all sessions (terminal + agent)
    - Create new terminal or agent session
-   - Delete sessions
-   - Show session status (running/idle/crashed)
+   - Delete sessions (swipe-to-dismiss on mobile)
+   - Session status chip (running/idle/crashed)
 
 3. **Terminal View**
-   - Connect via `WS /ws/terminal?session=X`
-   - Render terminal output (ANSI escape sequence processing)
-   - Send keyboard input (including special keys)
-   - Mobile: virtual keyboard with special key bar (Ctrl, Tab, Esc, arrows)
+   - Remote terminal rendering (ANSI escape sequences)
+   - Keyboard input (including special keys)
+   - Mobile: virtual key bar (Ctrl, Tab, Esc, arrows)
    - Desktop: native keyboard passthrough
    - Fit terminal to screen size
 
 4. **Agent Chat**
-   - Connect via `WS /ws/agent?session=X`
-   - Display message types: user message, agent text, thinking, tool use, tool result, progress, error, turn complete
-   - Send messages to agent
-   - Show messages from other sources (Feishu) with `[source]` prefix
+   - Chat interface with message bubbles
+   - Message types: user, agent text, thinking, tool use, tool result, progress, error, turn complete
+   - Messages from other sources shown with source label
    - Markdown rendering for agent text
+   - Send messages via text field
 
 ### P2: Enhanced
 
-5. **Plugin Status** — Show Feishu/Tunnel connection status
-6. **Tunnel URL** — Display and copy public tunnel URL
-7. **Dark/Light Theme** — Match system or manual toggle
-8. **Notifications** — Push notifications for agent completion, errors
+5. **Plugin Status** — Connection badges for integrations
+6. **Tunnel URL** — Display and copy-to-clipboard
+7. **Theming** — Dark/light, match system or manual toggle
+8. **Notifications** — Push notifications for agent events
 
 ### P3: Polish
 
 9. **Multi-server Dashboard** — Overview of all saved servers
-10. **Session Tabs** — Switch between multiple terminal/agent sessions
+10. **Session Tabs** — Quick switch between active sessions
 11. **Settings** — Font size, theme, notification preferences
 
 ## Tech Stack
 
 | Concern | Package |
 |---------|---------|
-| Terminal rendering | `xterm` (dart package, Canvas-based) |
+| UI framework | Flutter + Material 3 |
+| Terminal rendering | `xterm` (dart, Canvas-based) |
 | WebSocket | `web_socket_channel` |
 | HTTP | `dio` |
 | State management | `riverpod` |
@@ -98,41 +107,45 @@ Linux desktop is NOT a target — Linux users run `rtb-cli` (server) and connect
 relais/
 ├── lib/
 │   ├── main.dart
-│   ├── app.dart                    # MaterialApp, router, theme
+│   ├── app.dart                       # MaterialApp, router, M3 theme
 │   ├── models/
-│   │   ├── server.dart             # Server connection info
-│   │   ├── session.dart            # Session metadata
-│   │   └── agent_message.dart      # Agent chat message types
+│   │   ├── server.dart                # Server connection info (url, token, name)
+│   │   ├── session.dart               # Session metadata (id, type, status)
+│   │   └── agent_message.dart         # Chat message types
 │   ├── services/
-│   │   ├── rtb_api.dart            # REST API client (dio)
-│   │   ├── terminal_ws.dart        # Terminal WebSocket (binary)
-│   │   └── agent_ws.dart           # Agent WebSocket (JSON)
+│   │   ├── api_client.dart            # REST API client (dio)
+│   │   ├── terminal_connection.dart   # Terminal WebSocket (binary)
+│   │   └── agent_connection.dart      # Agent WebSocket (JSON)
 │   ├── providers/
-│   │   ├── server_provider.dart    # Current server, connection state
-│   │   ├── session_provider.dart   # Session list, CRUD
-│   │   ├── terminal_provider.dart  # Terminal data stream
-│   │   └── agent_provider.dart     # Agent messages stream
+│   │   ├── server_provider.dart       # Server list, current connection
+│   │   ├── session_provider.dart      # Session list, CRUD
+│   │   ├── terminal_provider.dart     # Terminal data stream
+│   │   └── agent_provider.dart        # Agent messages stream
 │   ├── screens/
-│   │   ├── connect_screen.dart     # Server URL input / QR scan
-│   │   ├── home_screen.dart        # Session list + navigation
-│   │   ├── terminal_screen.dart    # Full-screen terminal
-│   │   └── agent_screen.dart       # Agent chat interface
+│   │   ├── connect_screen.dart        # Server URL input / QR scan
+│   │   ├── home_screen.dart           # Session list + adaptive navigation
+│   │   ├── terminal_screen.dart       # Full-screen terminal
+│   │   └── agent_screen.dart          # Agent chat interface
 │   ├── widgets/
-│   │   ├── terminal_view.dart      # xterm widget wrapper
-│   │   ├── agent_chat.dart         # Chat bubble list
-│   │   ├── agent_message_bubble.dart  # Individual message rendering
-│   │   ├── session_card.dart       # Session list item
-│   │   ├── special_key_bar.dart    # Mobile virtual key bar
-│   │   └── qr_scanner.dart         # QR code scanner
+│   │   ├── terminal_view.dart         # xterm widget wrapper
+│   │   ├── agent_chat.dart            # Chat message list
+│   │   ├── message_bubble.dart        # Individual message rendering
+│   │   ├── session_card.dart          # Session list item (M3 Card)
+│   │   ├── special_key_bar.dart       # Mobile virtual key bar
+│   │   └── connection_indicator.dart  # Server status badge
 │   └── theme/
-│       └── app_theme.dart          # Dark/light theme definitions
+│       └── app_theme.dart             # M3 theme (seed color, dark/light)
 ├── pubspec.yaml
 └── README.md
 ```
 
-## RTB Server API Surface (client needs)
+## Server Protocol
+
+Relais communicates with any server implementing this protocol.
 
 ### REST API
+
+All requests include `Authorization: Bearer <token>` header.
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -143,22 +156,20 @@ relais/
 | GET | `/api/v1/plugins` | Plugin status |
 | GET | `/api/v1/tunnel/status` | Tunnel URL |
 
-All requests include `Authorization: Bearer <token>` header.
-
 ### WebSocket
 
 | Path | Protocol | Purpose |
 |------|----------|---------|
-| `/ws/terminal?session=X&token=T` | Binary frames (PTY I/O) | Terminal |
+| `/ws/terminal?session=X&token=T` | Binary frames | Terminal I/O |
 | `/ws/agent?session=X&token=T` | JSON frames | Agent chat |
-| `/ws/status?token=T` | JSON frames | Real-time status updates |
+| `/ws/status?token=T` | JSON frames | Real-time status |
 
-### Agent WebSocket Message Types (server → client)
+### Agent WebSocket Messages (server → client)
 
 | type | Fields | Display |
 |------|--------|---------|
 | `status` | status, session_id | Connection indicator |
-| `user_message` | text, source, seq | User bubble with [source] |
+| `user_message` | text, source, seq | User bubble with source label |
 | `text` | content, streaming, seq | Agent text (markdown) |
 | `thinking` | content, seq | Collapsed thinking block |
 | `tool_use` | name, id, input, seq | Tool invocation card |
@@ -167,7 +178,7 @@ All requests include `Authorization: Bearer <token>` header.
 | `turn_complete` | cost_usd, seq | Done marker |
 | `error` | message, severity, guidance, seq | Error alert |
 
-### Agent WebSocket Message Types (client → server)
+### Agent WebSocket Messages (client → server)
 
 | type | Fields |
 |------|--------|
@@ -180,4 +191,4 @@ All requests include `Authorization: Bearer <token>` header.
 **P2:** Plugin status, tunnel URL, theming, notifications
 **P3:** Multi-server dashboard, session tabs, settings
 
-Each phase is a separate spec → plan → implementation cycle.
+Each phase is a separate plan → implementation cycle.
