@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/agent_message.dart';
+import '../models/slash_command.dart';
 
 class AgentConnection {
   WebSocketChannel? _channel;
@@ -11,9 +12,11 @@ class AgentConnection {
 
   final _messageController = StreamController<AgentMessage>.broadcast();
   final _statusController = StreamController<String>.broadcast();
+  final _slashCommandController = StreamController<List<SlashCommand>>.broadcast();
 
   Stream<AgentMessage> get messages => _messageController.stream;
   Stream<String> get status => _statusController.stream;
+  Stream<List<SlashCommand>> get slashCommands => _slashCommandController.stream;
 
   AgentConnection({
     required this.baseUrl,
@@ -35,6 +38,15 @@ class AgentConnection {
 
           if (type == 'status') {
             _statusController.add(json['status'] as String? ?? 'unknown');
+            return;
+          }
+
+          if (type == 'available_commands') {
+            final rawList = json['commands'] as List<dynamic>;
+            final commands = rawList
+                .map((c) => SlashCommand.fromJson(c as Map<String, dynamic>))
+                .toList();
+            _slashCommandController.add(commands);
             return;
           }
 
@@ -63,5 +75,6 @@ class AgentConnection {
     _channel?.sink.close();
     _messageController.close();
     _statusController.close();
+    _slashCommandController.close();
   }
 }
