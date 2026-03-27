@@ -279,6 +279,20 @@ async fn handle_agent(
                             break;
                         }
                     }
+                    Some(DataEvent::AgentAvailableCommands { commands }) => {
+                        let cmd_json: Vec<serde_json::Value> = commands
+                            .iter()
+                            .map(|(name, desc)| serde_json::json!({ "name": name, "description": desc }))
+                            .collect();
+                        let msg = serde_json::json!({
+                            "type": "available_commands",
+                            "commands": cmd_json,
+                        });
+                        if ws_tx.send(Message::Text(msg.to_string().into())).await.is_err() {
+                            debug!(session_id = %session_id, "failed to send available_commands, closing");
+                            break;
+                        }
+                    }
                     Some(_) => {
                         // Ignore non-agent data events (PTY output, etc.)
                     }
@@ -390,6 +404,16 @@ fn data_event_to_json(event: &DataEvent) -> serde_json::Value {
             "text": text,
             "source": source,
         }),
+        DataEvent::AgentAvailableCommands { commands } => {
+            let cmd_json: Vec<serde_json::Value> = commands
+                .iter()
+                .map(|(name, desc)| serde_json::json!({ "name": name, "description": desc }))
+                .collect();
+            serde_json::json!({
+                "type": "available_commands",
+                "commands": cmd_json,
+            })
+        }
         _ => serde_json::json!({ "type": "unknown" }),
     }
 }
