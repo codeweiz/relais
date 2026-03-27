@@ -116,12 +116,10 @@ async fn handle_terminal(socket: WebSocket, state: AppState, session_id: String)
                                 if let Err(e) = state.core.pty_manager.resize(&session_id, cols, rows) {
                                     warn!(session_id = %session_id, error = %e, "failed to resize PTY");
                                 }
-                                // After the first resize, wait briefly for tmux to
-                                // re-render at the new dimensions, then capture-pane.
+                                // After the first resize, send capture-pane so content
+                                // matches the client's actual terminal dimensions.
                                 if !got_initial_resize {
                                     got_initial_resize = true;
-                                    // Give tmux time to re-render after resize
-                                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                                     if let Ok(initial) = relais_core::pty::tmux::capture_pane(&session_id) {
                                         if !initial.is_empty() {
                                             let _ = ws_tx.send(Message::Binary(initial.into())).await;
