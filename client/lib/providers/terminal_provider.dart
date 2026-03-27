@@ -18,7 +18,6 @@ class TerminalSession {
     required StreamSubscription outputSub,
   }) : _outputSub = outputSub;
 
-  /// Create and connect a new persistent terminal session.
   factory TerminalSession.connect({
     required String baseUrl,
     required String token,
@@ -31,23 +30,18 @@ class TerminalSession {
       sessionId: sessionId,
     );
 
-    // Keyboard input → server
     terminal.onOutput = (data) {
       connection.sendInput(data);
     };
 
-    // Resize → server
     terminal.onResize = (cols, rows, pw, ph) {
       connection.resize(cols, rows);
     };
 
-    // Server output → terminal (with xterm dart bug workaround)
     final outputSub = connection.output.listen((Uint8List data) {
       try {
         terminal.write(utf8.decode(data, allowMalformed: true));
-      } catch (_) {
-        // xterm dart eraseLineToCursor bug (index -1)
-      }
+      } catch (_) {}
     });
 
     connection.connect();
@@ -71,50 +65,42 @@ class TerminalSession {
   }
 }
 
-/// Manages all persistent terminal sessions by session ID.
-/// Terminals stay alive when navigating away and are reused on re-enter.
-class TerminalManager extends StateNotifier<Map<String, TerminalSession>> {
-  TerminalManager() : super({});
+/// Simple session cache — NOT a StateNotifier, so it can be
+/// accessed during build without triggering state modifications.
+class TerminalManager {
+  final _sessions = <String, TerminalSession>{};
 
-  /// Get or create a terminal session.
   TerminalSession getOrCreate({
     required String sessionId,
     required String baseUrl,
     required String token,
   }) {
-    if (state.containsKey(sessionId)) {
-      return state[sessionId]!;
-    }
-
-    final session = TerminalSession.connect(
-      baseUrl: baseUrl,
-      token: token,
-      sessionId: sessionId,
+    return _sessions.putIfAbsent(
+      sessionId,
+      () => TerminalSession.connect(
+        baseUrl: baseUrl,
+        token: token,
+        sessionId: sessionId,
+      ),
     );
-
-    state = {...state, sessionId: session};
-    return session;
   }
 
-  /// Remove and dispose a terminal session.
   void remove(String sessionId) {
-    final session = state[sessionId];
-    if (session != null) {
-      session.dispose();
-      state = Map.from(state)..remove(sessionId);
-    }
+    _sessions[sessionId]?.dispose();
+    _sessions.remove(sessionId);
   }
 
-  @override
-  void dispose() {
-    for (final session in state.values) {
-      session.dispose();
+  void disposeAll() {
+    for (final s in _sessions.values) {
+      s.dispose();
     }
-    super.dispose();
+    _sessions.clear();
   }
 }
 
-final terminalManagerProvider =
-    StateNotifierProvider<TerminalManager, Map<String, TerminalSession>>((ref) {
-  return TerminalManager();
+/// Single instance, safe to read during build.
+final terminalManagerProvider = Provider<TerminalManager>((ref) {
+  final manager = TerminalManager();
+  ref.onDispose(() => manager.disposeAll());
+  return manager;
 });

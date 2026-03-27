@@ -39,8 +39,8 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       return const Scaffold(body: Center(child: Text('Not connected')));
     }
 
-    // Get or create persistent terminal session
-    final session = ref.read(terminalManagerProvider.notifier).getOrCreate(
+    // Get or create persistent terminal session (no state modification)
+    final session = ref.read(terminalManagerProvider).getOrCreate(
       sessionId: widget.sessionId,
       baseUrl: server.url,
       token: server.token,
