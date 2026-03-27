@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/agent_message.dart';
+import '../models/slash_command.dart';
 import '../services/agent_connection.dart';
 
 /// Ephemeral message types — removed on turn_complete.
@@ -17,6 +18,12 @@ class AgentSession {
   final List<AgentMessage> messages = [];
   String status = 'connecting';
   bool waiting = false;
+
+  List<SlashCommand>? _cachedCommands;
+  StreamSubscription? _slashCmdSub;
+
+  /// Cached slash commands from the agent, or null if not yet received.
+  List<SlashCommand>? get availableCommands => _cachedCommands;
 
   StreamSubscription? _messageSub;
   StreamSubscription? _statusSub;
@@ -64,6 +71,14 @@ class AgentSession {
 
     session._statusSub = connection.status.listen((s) {
       session.status = s;
+      if (s == 'disconnected') {
+        session._cachedCommands = null;
+      }
+      session._notify();
+    });
+
+    session._slashCmdSub = connection.slashCommands.listen((commands) {
+      session._cachedCommands = commands;
       session._notify();
     });
 
@@ -94,6 +109,7 @@ class AgentSession {
   void dispose() {
     _messageSub?.cancel();
     _statusSub?.cancel();
+    _slashCmdSub?.cancel();
     connection.dispose();
   }
 }
