@@ -43,7 +43,13 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
 
         // Start listening to output after connect
         _outputSubscription = widget.connection.output.listen((Uint8List data) {
-          _terminal.write(utf8.decode(data, allowMalformed: true));
+          try {
+            _terminal.write(utf8.decode(data, allowMalformed: true));
+          } catch (_) {
+            // xterm dart package has a bug in eraseLineToCursor when
+            // cursor is at position 0 (index -1 access). Silently
+            // ignore — the terminal continues working.
+          }
         });
       } else {
         widget.connection.resize(cols, rows);
