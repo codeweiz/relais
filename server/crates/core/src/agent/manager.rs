@@ -299,13 +299,18 @@ impl AgentManager {
             loop {
                 match rx.recv().await {
                     Ok(event) => {
-                        // Persist event for replay
-                        if let Ok(mut history) = event_history.lock() {
-                            history.push(event.clone());
+                        // AvailableCommands is metadata — broadcast but don't persist in history
+                        let skip_history = matches!(event, AgentEvent::AvailableCommands(_));
+                        if !skip_history {
+                            if let Ok(mut history) = event_history.lock() {
+                                history.push(event.clone());
+                            }
                         }
 
                         let data_event = agent_event_to_data_event(seq, &event);
-                        seq += 1;
+                        if !skip_history {
+                            seq += 1;
+                        }
                         event_bus.publish_data(&sid, data_event).await;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
@@ -394,6 +399,12 @@ pub fn agent_event_to_data_event(seq: u64, event: &AgentEvent) -> DataEvent {
             seq,
             text: text.clone(),
             source: source.clone(),
+        },
+        AgentEvent::AvailableCommands(cmds) => DataEvent::AgentAvailableCommands {
+            commands: cmds
+                .iter()
+                .map(|c| (c.name.clone(), c.description.clone()))
+                .collect(),
         },
     }
 }

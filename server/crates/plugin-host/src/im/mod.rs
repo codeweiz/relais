@@ -595,6 +595,7 @@ impl ImBridge {
                             .await;
                     }
                     Some(DataEvent::PtyOutput { .. }) | Some(DataEvent::PtyExited { .. }) => {}
+                    Some(DataEvent::AgentAvailableCommands { .. }) => {}
                     None => return,
                 }
             }
@@ -720,6 +721,7 @@ impl ImBridge {
                             .await;
                         return;
                     }
+                    Some(DataEvent::AgentAvailableCommands { .. }) => {}
                     None => return, // channel closed
                 }
             }
@@ -840,6 +842,7 @@ impl ImBridge {
                                         channel: Some(channel_id.clone()),
                                     }).await;
                                 }
+                                Some(DataEvent::AgentAvailableCommands { .. }) => {}
 
                                 None => return, // channel closed
                             }

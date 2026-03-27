@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 
 use tokio::sync::{broadcast, mpsc, oneshot};
 
-use super::event::{AgentEvent, AgentKind};
+use super::event::{AgentEvent, AgentKind, SlashCommandInfo};
 
 // ---------------------------------------------------------------------------
 // Internal command type
@@ -461,6 +461,17 @@ impl agent_client_protocol::Client for SharedAcpClientHandler {
                     });
                     let _ = self.event_tx.send(AgentEvent::ToolUse { name, id, input });
                 }
+            }
+            SessionUpdate::AvailableCommandsUpdate(update) => {
+                let commands: Vec<SlashCommandInfo> = update
+                    .available_commands
+                    .iter()
+                    .map(|cmd| SlashCommandInfo {
+                        name: cmd.name.strip_prefix('/').unwrap_or(&cmd.name).to_string(),
+                        description: cmd.description.clone(),
+                    })
+                    .collect();
+                let _ = self.event_tx.send(AgentEvent::AvailableCommands(commands));
             }
             _ => {}
         }
