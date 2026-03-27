@@ -2,8 +2,11 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/session.dart';
 import '../providers/server_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/terminal_connection.dart';
+import '../widgets/session_switcher.dart';
 import '../widgets/terminal_view.dart';
 import '../widgets/special_key_bar.dart';
 
@@ -50,6 +53,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
     }
 
     final isMobile = MediaQuery.of(context).size.width < 600 && !kIsWeb;
+    final settings = ref.watch(settingsProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0d1117),
@@ -65,15 +69,9 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
         ),
         title: Row(
           children: [
-            const Icon(Icons.terminal, size: 14, color: Color(0xFF8b949e)),
-            const SizedBox(width: 6),
-            Text(
-              widget.sessionId,
-              style: const TextStyle(
-                fontSize: 12,
-                fontFamily: 'JetBrains Mono, monospace',
-                color: Color(0xFF8b949e),
-              ),
+            SessionSwitcher(
+              currentSessionId: widget.sessionId,
+              filterKind: SessionKind.terminal,
             ),
             const SizedBox(width: 8),
             Container(
@@ -92,7 +90,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       body: Column(
         children: [
           Expanded(
-            child: TerminalViewWidget(connection: _connection!),
+            child: TerminalViewWidget(connection: _connection!, fontSize: settings.terminalFontSize),
           ),
           if (isMobile)
             SpecialKeyBar(

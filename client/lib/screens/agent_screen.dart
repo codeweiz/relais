@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/session.dart';
 import '../providers/server_provider.dart';
 import '../services/agent_connection.dart';
 import '../models/agent_message.dart';
 import '../widgets/agent_chat.dart';
+import '../widgets/session_switcher.dart';
 
 class AgentScreen extends ConsumerStatefulWidget {
   final String sessionId;
@@ -103,7 +105,10 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Agent ${widget.sessionId.substring(0, 6)}...'),
+        title: SessionSwitcher(
+          currentSessionId: widget.sessionId,
+          filterKind: SessionKind.agent,
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
