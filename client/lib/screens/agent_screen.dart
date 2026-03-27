@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../models/session.dart';
 import '../providers/server_provider.dart';
 import '../providers/agent_provider.dart';
@@ -20,6 +21,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   AgentSession? _session;
+  final _speech = stt.SpeechToText();
+  bool _isListening = false;
 
   @override
   void initState() {
@@ -61,8 +64,33 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     _scrollToBottom();
   }
 
+  Future<void> _toggleVoice() async {
+    if (_isListening) {
+      await _speech.stop();
+      setState(() => _isListening = false);
+      return;
+    }
+
+    final available = await _speech.initialize(
+      onError: (_) => setState(() => _isListening = false),
+    );
+    if (!available) return;
+
+    setState(() => _isListening = true);
+    await _speech.listen(
+      localeId: 'zh-CN',
+      onResult: (result) {
+        _inputController.text = result.recognizedWords;
+        if (result.finalResult) {
+          setState(() => _isListening = false);
+        }
+      },
+    );
+  }
+
   @override
   void dispose() {
+    _speech.stop();
     _session?.removeListener(_onUpdate);
     _inputController.dispose();
     _scrollController.dispose();
@@ -142,7 +170,18 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       textInputAction: TextInputAction.send,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: _toggleVoice,
+                    icon: Icon(
+                      _isListening ? Icons.mic : Icons.mic_none,
+                      color: _isListening
+                          ? Theme.of(context).colorScheme.error
+                          : null,
+                    ),
+                    tooltip: _isListening ? '停止' : '语音输入',
+                  ),
+                  const SizedBox(width: 4),
                   IconButton.filled(
                     onPressed: _sendMessage,
                     icon: const Icon(Icons.send),

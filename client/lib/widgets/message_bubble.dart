@@ -107,62 +107,144 @@ class _ThinkingBubble extends StatelessWidget {
   }
 }
 
-class _ToolUseBubble extends StatelessWidget {
+class _ToolUseBubble extends StatefulWidget {
   final AgentMessage message;
   const _ToolUseBubble({required this.message});
 
   @override
+  State<_ToolUseBubble> createState() => _ToolUseBubbleState();
+}
+
+class _ToolUseBubbleState extends State<_ToolUseBubble> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final input = widget.message.toolInput;
+    final hasInput = input != null && input.isNotEmpty;
+
     return Card.outlined(
       margin: const EdgeInsets.symmetric(vertical: 4),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Icon(Icons.build_circle,
-                size: 20, color: Theme.of(context).colorScheme.tertiary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(message.toolName ?? 'Tool',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w500)),
-            ),
-          ],
+      child: InkWell(
+        onTap: hasInput ? () => setState(() => _expanded = !_expanded) : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.build_circle,
+                      size: 20, color: Theme.of(context).colorScheme.tertiary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(widget.message.toolName ?? 'Tool',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w500)),
+                  ),
+                  if (hasInput)
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                ],
+              ),
+              if (_expanded && hasInput) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    input!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _ToolResultBubble extends StatelessWidget {
+class _ToolResultBubble extends StatefulWidget {
   final AgentMessage message;
   const _ToolResultBubble({required this.message});
 
   @override
+  State<_ToolResultBubble> createState() => _ToolResultBubbleState();
+}
+
+class _ToolResultBubbleState extends State<_ToolResultBubble> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    final isErr = message.isError == true;
+    final isErr = widget.message.isError == true;
+    final content = widget.message.content;
+    final isLong = content.length > 200;
+
     return Card.outlined(
       margin: const EdgeInsets.symmetric(vertical: 2),
       color: isErr
-          ? Theme.of(context)
-              .colorScheme
-              .errorContainer
-              .withValues(alpha: 0.3)
+          ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3)
           : null,
-      child: Padding(
-        padding: const EdgeInsets.all(8),
-        child: Text(
-          message.content.length > 200
-              ? '${message.content.substring(0, 200)}...'
-              : message.content,
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(fontFamily: 'monospace'),
-          maxLines: 5,
-          overflow: TextOverflow.ellipsis,
+      child: InkWell(
+        onTap: isLong ? () => setState(() => _expanded = !_expanded) : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    isErr ? Icons.error_outline : Icons.check_circle_outline,
+                    size: 14,
+                    color: isErr
+                        ? Theme.of(context).colorScheme.error
+                        : Theme.of(context).colorScheme.outline,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    isErr ? 'Error' : 'Result',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                  ),
+                  if (isLong) ...[
+                    const Spacer(),
+                    Icon(
+                      _expanded ? Icons.expand_less : Icons.expand_more,
+                      size: 16,
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                _expanded || !isLong ? content : '${content.substring(0, 200)}...',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+              ),
+            ],
+          ),
         ),
       ),
     );
