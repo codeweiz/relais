@@ -117,8 +117,10 @@ async fn handle_terminal(socket: WebSocket, state: AppState, session_id: String)
                                 // then send capture-pane at correct dimensions.
                                 if !got_initial_resize {
                                     got_initial_resize = true;
-                                    // Wait for tmux to re-render at new dimensions
-                                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                                    // Wait for tmux + TUI app to re-render after SIGWINCH.
+                                    // 150ms allows complex apps (vim, fzf, Claude) to finish
+                                    // their full redraw before we capture the screen.
+                                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
                                     if let Ok(initial) = relais_core::pty::tmux::capture_pane(&session_id) {
                                         if !initial.is_empty() {
                                             // Prepend ESC[2J (clear screen) + ESC[H (cursor home)
