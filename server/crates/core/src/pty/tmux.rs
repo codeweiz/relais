@@ -247,22 +247,33 @@ pub fn resize_pane(session_id: &str, cols: u16, rows: u16) -> Result<()> {
 /// Returns the raw stdout bytes from `tmux capture-pane -p`.
 /// Tries with `-e` first (escape sequences, tmux 3.1+), then falls back
 /// to plain capture for older tmux versions.
+/// Trailing blank lines are stripped to avoid scrollable empty space on connect.
 pub fn capture_pane(session_id: &str) -> Result<Vec<u8>> {
     let name = session_name(session_id);
     debug!(session = %name, "capturing tmux pane");
 
-    // Try with -e (escape sequences, tmux 3.1+) first
+    // Try with -e (escape sequences, tmux 3.1+) and -J (join wrapped lines) first
     let output = Command::new("tmux")
-        .args(["capture-pane", "-t", &name, "-p", "-e"])
+        .args(["capture-pane", "-t", &name, "-p", "-e", "-J"])
         .output()
         .context("failed to execute tmux capture-pane")?;
     if output.status.success() {
-        return Ok(output.stdout);
+        return Ok(strip_trailing_blank_lines(&output.stdout));
     }
 
     // Fallback without -e for older tmux
-    let output = run_tmux_ok(&["capture-pane", "-t", &name, "-p"])?;
-    Ok(output.stdout)
+    let output = run_tmux_ok(&["capture-pane", "-t", &name, "-p", "-J"])?;
+    Ok(strip_trailing_blank_lines(&output.stdout))
+}
+
+fn strip_trailing_blank_lines(data: &[u8]) -> Vec<u8> {
+    let s = String::from_utf8_lossy(data);
+    let trimmed = s.trim_end();
+    let mut result = trimmed.as_bytes().to_vec();
+    if !result.is_empty() {
+        result.push(b'\n');
+    }
+    result
 }
 
 // ---------------------------------------------------------------------------

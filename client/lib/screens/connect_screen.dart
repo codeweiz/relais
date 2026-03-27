@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/server_provider.dart';
 import '../models/server.dart';
+import '../l10n/strings.dart';
 
 class ConnectScreen extends ConsumerStatefulWidget {
   const ConnectScreen({super.key});
@@ -65,7 +66,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
       context.go('/home');
     } else if (state.error != null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Connection failed: ${state.error}')),
+        SnackBar(content: Text('${S.connectionFailed}: ${state.error}')),
       );
     }
   }
@@ -95,11 +96,11 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
                     color: Theme.of(context).colorScheme.primary,
                   ),
                   const SizedBox(height: 16),
-                  Text('Relais',
+                  Text(S.appName,
                       style: Theme.of(context).textTheme.headlineLarge),
                   const SizedBox(height: 8),
                   Text(
-                    'Connect to a server',
+                    S.connectToServer,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color:
                               Theme.of(context).colorScheme.onSurfaceVariant,
@@ -108,21 +109,21 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
                   const SizedBox(height: 32),
                   TextField(
                     controller: _urlController,
-                    decoration: const InputDecoration(
-                      labelText: 'Server URL',
-                      hintText: 'http://host:3000?token=xxx',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.dns_outlined),
+                    decoration: InputDecoration(
+                      labelText: S.serverUrl,
+                      hintText: S.serverUrlHint,
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.dns_outlined),
                     ),
                     onChanged: (_) => _parseUrlInput(),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _tokenController,
-                    decoration: const InputDecoration(
-                      labelText: 'Token',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.key_outlined),
+                    decoration: InputDecoration(
+                      labelText: S.token,
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.key_outlined),
                     ),
                     obscureText: true,
                   ),
@@ -138,14 +139,14 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
                               child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.link),
                       label: Text(
-                          state.connecting ? 'Connecting...' : 'Connect'),
+                          state.connecting ? S.connecting : S.connect),
                     ),
                   ),
                   if (_savedServers.isNotEmpty) ...[
                     const SizedBox(height: 32),
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('Saved Servers',
+                      child: Text(S.savedServers,
                           style: Theme.of(context).textTheme.titleSmall),
                     ),
                     const SizedBox(height: 8),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/session.dart';
+import '../l10n/strings.dart';
 
 class SessionCard extends StatelessWidget {
   final Session session;
@@ -17,10 +18,10 @@ class SessionCard extends StatelessWidget {
     try {
       final dt = DateTime.parse(isoTime);
       final diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 1) return 'just now';
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return '${diff.inHours}h ago';
-      return '${diff.inDays}d ago';
+      if (diff.inMinutes < 1) return S.justNow;
+      if (diff.inMinutes < 60) return S.minutesAgo(diff.inMinutes);
+      if (diff.inHours < 24) return S.hoursAgo(diff.inHours);
+      return S.daysAgo(diff.inDays);
     } catch (_) {
       return '';
     }
@@ -54,7 +55,7 @@ class SessionCard extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.delete_outline, size: 20),
                 onPressed: onDelete,
-                tooltip: 'Delete',
+                tooltip: S.delete,
               ),
           ],
         ),
@@ -71,11 +72,11 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, label) = switch (status) {
-      SessionStatus.running || SessionStatus.working => (Colors.green, 'Running'),
-      SessionStatus.ready || SessionStatus.idle => (Colors.blue, 'Ready'),
-      SessionStatus.crashed => (Colors.red, 'Crashed'),
-      SessionStatus.exited => (Colors.grey, 'Exited'),
-      SessionStatus.initializing => (Colors.orange, 'Starting'),
+      SessionStatus.running || SessionStatus.working => (Colors.green, S.running),
+      SessionStatus.ready || SessionStatus.idle => (Colors.blue, S.ready),
+      SessionStatus.crashed => (Colors.red, S.crashed),
+      SessionStatus.exited => (Colors.grey, S.exited),
+      SessionStatus.initializing => (Colors.orange, S.starting),
       _ => (Colors.grey, status.name),
     };
 

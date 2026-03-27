@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../l10n/strings.dart';
 
 class AppSettings {
   final ThemeMode themeMode;
@@ -41,12 +42,14 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    final locale = prefs.getString('locale') ?? 'zh';
+    S.locale = locale;
     state = AppSettings(
       themeMode: _parseThemeMode(prefs.getString('theme_mode') ?? 'system'),
       terminalFontSize: prefs.getDouble('terminal_font_size') ?? 14.0,
       terminalCursorBlink: prefs.getBool('terminal_cursor_blink') ?? true,
       defaultAgentProvider: prefs.getString('default_agent_provider') ?? 'claude-code',
-      locale: prefs.getString('locale') ?? 'zh',
+      locale: locale,
     );
   }
 
@@ -75,6 +78,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   }
 
   Future<void> setLocale(String locale) async {
+    S.locale = locale;
     state = state.copyWith(locale: locale);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('locale', locale);

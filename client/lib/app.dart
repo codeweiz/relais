@@ -20,7 +20,14 @@ final _router = GoRouter(
     ),
     GoRoute(
       path: '/home',
-      builder: (context, state) => const HomeScreen(),
+      pageBuilder: (context, state) => CustomTransitionPage(
+        key: const ValueKey('home'),
+        child: const HomeScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
     ),
     // Terminal and agent as sub-routes of /home so back works
     GoRoute(
@@ -28,7 +35,10 @@ final _router = GoRouter(
       pageBuilder: (context, state) => CustomTransitionPage(
         key: ValueKey('terminal-${state.pathParameters['id']}'),
         child: TerminalScreen(sessionId: state.pathParameters['id']!),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) => child,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 300),
       ),
     ),
     GoRoute(
@@ -36,7 +46,10 @@ final _router = GoRouter(
       pageBuilder: (context, state) => CustomTransitionPage(
         key: ValueKey('agent-${state.pathParameters['id']}'),
         child: AgentScreen(sessionId: state.pathParameters['id']!),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) => child,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 300),
       ),
     ),
     GoRoute(

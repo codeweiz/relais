@@ -5,6 +5,7 @@ import '../providers/server_provider.dart';
 import '../providers/session_provider.dart';
 import '../models/session.dart';
 import '../widgets/session_card.dart';
+import '../l10n/strings.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -47,7 +48,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.terminal),
-              title: const Text('New Terminal'),
+              title: Text(S.newTerminal),
               onTap: () {
                 Navigator.pop(context);
                 _createSession(SessionKind.terminal);
@@ -55,7 +56,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.smart_toy),
-              title: const Text('New Agent'),
+              title: Text(S.newAgent),
               onTap: () {
                 Navigator.pop(context);
                 _createSession(SessionKind.agent);
@@ -103,13 +104,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         size: 64,
                         color: Theme.of(context).colorScheme.outline),
                     const SizedBox(height: 16),
-                    Text('No sessions',
+                    Text(S.noSessions,
                         style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
                     FilledButton.tonalIcon(
                       onPressed: _showCreateDialog,
                       icon: const Icon(Icons.add),
-                      label: const Text('Create Session'),
+                      label: Text(S.createSession),
                     ),
                   ],
                 ),

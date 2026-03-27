@@ -7,6 +7,7 @@ import '../services/agent_connection.dart';
 import '../models/agent_message.dart';
 import '../widgets/agent_chat.dart';
 import '../widgets/session_switcher.dart';
+import '../l10n/strings.dart';
 
 class AgentScreen extends ConsumerStatefulWidget {
   final String sessionId;
@@ -101,7 +102,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   @override
   Widget build(BuildContext context) {
     if (_connection == null) {
-      return const Scaffold(body: Center(child: Text('Not connected')));
+      return Scaffold(body: Center(child: Text(S.notConnected)));
     }
 
     return Scaffold(
@@ -133,7 +134,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
           Expanded(
             child: _messages.isEmpty
                 ? Center(
-                    child: Text('Send a message to start',
+                    child: Text(S.sendHint,
                         style: Theme.of(context)
                             .textTheme
                             .bodyLarge
@@ -156,9 +157,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                   Expanded(
                     child: TextField(
                       controller: _inputController,
-                      decoration: const InputDecoration(
-                        hintText: 'Message...',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        hintText: S.sendMessage,
+                        border: const OutlineInputBorder(),
                         contentPadding: EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
                         isDense: true,
