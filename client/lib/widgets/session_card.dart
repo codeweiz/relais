@@ -45,7 +45,7 @@ class SessionCard extends StatelessWidget {
         title: Text(session.name, style: const TextStyle(fontWeight: FontWeight.w500)),
         subtitle: Text(
           '${session.id.substring(0, 8)} · ${_formatTime(session.lastActive)}',
-          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -86,7 +86,7 @@ class _StatusChip extends StatelessWidget {
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 12)),
+      child: Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color)),
     );
   }
 }

@@ -59,8 +59,15 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     final text = _inputController.text.trim();
     if (text.isEmpty || _session == null) return;
 
+    // Stop voice if active
+    if (_isListening) {
+      _speech.stop();
+      _isListening = false;
+    }
+
     _session!.sendMessage(text);
     _inputController.clear();
+    setState(() {}); // Ensure UI updates after clear
     _scrollToBottom();
   }
 
