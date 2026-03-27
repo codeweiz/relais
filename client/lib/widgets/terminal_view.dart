@@ -1,61 +1,18 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:xterm/xterm.dart';
-import '../services/terminal_connection.dart';
 
-class TerminalViewWidget extends StatefulWidget {
-  final TerminalConnection connection;
+/// Pure rendering widget — takes an existing Terminal object,
+/// does NOT manage connection lifecycle.
+class TerminalViewWidget extends StatelessWidget {
+  final Terminal terminal;
   final double fontSize;
 
-  const TerminalViewWidget({super.key, required this.connection, this.fontSize = 14.0});
-
-  @override
-  State<TerminalViewWidget> createState() => _TerminalViewWidgetState();
-}
-
-class _TerminalViewWidgetState extends State<TerminalViewWidget> {
-  late final Terminal _terminal;
-  StreamSubscription? _outputSubscription;
-  bool _connected = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _terminal = Terminal(maxLines: 100);
-
-    // Keyboard input → server (binary)
-    _terminal.onOutput = (data) {
-      widget.connection.sendInput(data);
-    };
-
-    // Wait for first resize before connecting — this ensures the server
-    // knows the correct terminal size before sending capture-pane content.
-    _terminal.onResize = (cols, rows, pixelWidth, pixelHeight) {
-      if (!_connected) {
-        _connected = true;
-        // Connect and immediately send resize so server has correct size
-        // before capture-pane fires
-        widget.connection.connect();
-        widget.connection.resize(cols, rows);
-
-        // Start listening to output after connect
-        _outputSubscription = widget.connection.output.listen((Uint8List data) {
-          try {
-            _terminal.write(utf8.decode(data, allowMalformed: true));
-          } catch (_) {
-            // xterm dart package has a bug in eraseLineToCursor when
-            // cursor is at position 0 (index -1 access). Silently
-            // ignore — the terminal continues working.
-          }
-        });
-      } else {
-        widget.connection.resize(cols, rows);
-      }
-    };
-  }
+  const TerminalViewWidget({
+    super.key,
+    required this.terminal,
+    this.fontSize = 14.0,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -64,9 +21,9 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
         child: TerminalView(
-          _terminal,
+          terminal,
           textStyle: TerminalStyle(
-            fontSize: widget.fontSize,
+            fontSize: fontSize,
             fontFamily: GoogleFonts.jetBrainsMono().fontFamily ?? 'monospace',
           ),
           theme: const TerminalTheme(
@@ -99,12 +56,5 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _outputSubscription?.cancel();
-    widget.connection.dispose();
-    super.dispose();
   }
 }

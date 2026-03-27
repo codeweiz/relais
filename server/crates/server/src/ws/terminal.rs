@@ -82,7 +82,14 @@ async fn handle_terminal(socket: WebSocket, state: AppState, session_id: String)
     let mut live_rx = session.subscribe();
     let mut status_rx = session.subscribe_status();
 
-    let mut got_initial_resize = false;
+    // Send initial screen content on connect so the client gets
+    // immediate feedback. With persistent connections this only
+    // happens once per session lifetime.
+    if let Ok(initial) = relais_core::pty::tmux::capture_pane(&session_id) {
+        if !initial.is_empty() {
+            let _ = ws_tx.send(Message::Binary(initial.into())).await;
+        }
+    }
 
     // Heartbeat: ping every 30 seconds
     let mut ping_interval = interval(Duration::from_secs(30));
@@ -113,25 +120,8 @@ async fn handle_terminal(socket: WebSocket, state: AppState, session_id: String)
                                 if let Err(e) = state.core.pty_manager.resize(&session_id, cols, rows) {
                                     warn!(session_id = %session_id, error = %e, "failed to resize PTY");
                                 }
-                                // After first resize, wait for tmux to re-render
-                                // then send capture-pane at correct dimensions.
-                                if !got_initial_resize {
-                                    got_initial_resize = true;
-                                    // Wait for tmux + TUI app to re-render after SIGWINCH.
-                                    // 150ms allows complex apps (vim, fzf, Claude) to finish
-                                    // their full redraw before we capture the screen.
-                                    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
-                                    if let Ok(initial) = relais_core::pty::tmux::capture_pane(&session_id) {
-                                        if !initial.is_empty() {
-                                            // Prepend ESC[2J (clear screen) + ESC[H (cursor home)
-                                            // so the client's xterm clears stale content before
-                                            // drawing the fresh capture. tmux history is unaffected.
-                                            let mut payload = b"\x1b[2J\x1b[H".to_vec();
-                                            payload.extend_from_slice(&initial);
-                                            let _ = ws_tx.send(Message::Binary(payload.into())).await;
-                                        }
-                                    }
-                                }
+                                // Resize only — no capture-pane needed since
+                                // the client keeps persistent connections.
                             }
                             Ok(ClientCommand::Keepalive { .. }) => {
                                 let ack = serde_json::json!({

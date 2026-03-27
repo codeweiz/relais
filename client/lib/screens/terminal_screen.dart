@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../models/session.dart';
 import '../providers/server_provider.dart';
 import '../providers/settings_provider.dart';
-import '../services/terminal_connection.dart';
+import '../providers/terminal_provider.dart';
 import '../widgets/session_switcher.dart';
 import '../widgets/terminal_view.dart';
 import '../widgets/special_key_bar.dart';
@@ -20,25 +20,10 @@ class TerminalScreen extends ConsumerStatefulWidget {
 }
 
 class _TerminalScreenState extends ConsumerState<TerminalScreen> {
-  TerminalConnection? _connection;
-  String _status = 'connecting';
-
   @override
   void initState() {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
-
-    final server = ref.read(serverProvider).server;
-    if (server != null) {
-      _connection = TerminalConnection(
-        baseUrl: server.url,
-        token: server.token,
-        sessionId: widget.sessionId,
-      );
-      _connection!.status.listen((s) {
-        if (mounted) setState(() => _status = s);
-      });
-    }
   }
 
   @override
@@ -49,9 +34,17 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_connection == null) {
+    final server = ref.watch(serverProvider).server;
+    if (server == null) {
       return const Scaffold(body: Center(child: Text('Not connected')));
     }
+
+    // Get or create persistent terminal session
+    final session = ref.read(terminalManagerProvider.notifier).getOrCreate(
+      sessionId: widget.sessionId,
+      baseUrl: server.url,
+      token: server.token,
+    );
 
     final isMobile = MediaQuery.of(context).size.width < 600 && !kIsWeb;
     final settings = ref.watch(settingsProvider);
@@ -80,7 +73,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
               height: 6,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: _status == 'connected'
+                color: session.status == 'connected'
                     ? const Color(0xFF3fb950)
                     : const Color(0xFFd29922),
               ),
@@ -91,11 +84,14 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
       body: Column(
         children: [
           Expanded(
-            child: TerminalViewWidget(connection: _connection!, fontSize: settings.terminalFontSize),
+            child: TerminalViewWidget(
+              terminal: session.terminal,
+              fontSize: settings.terminalFontSize,
+            ),
           ),
           if (isMobile)
             SpecialKeyBar(
-              onKey: (key) => _connection!.sendInput(key),
+              onKey: (key) => session.connection.sendInput(key),
             ),
         ],
       ),
