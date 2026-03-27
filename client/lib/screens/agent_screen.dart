@@ -42,17 +42,25 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       _messageSub = _connection!.messages.listen((msg) {
         if (!mounted) return;
 
-        // Skip echoed user messages from server (we added them locally)
-        if (msg.type == AgentMessageType.user && msg.source == 'web') return;
+        // Ephemeral types: only show during response, removed on turn_complete
+        const ephemeral = {
+          AgentMessageType.toolUse,
+          AgentMessageType.toolResult,
+          AgentMessageType.progress,
+          AgentMessageType.thinking,
+        };
 
-        // Skip turn_complete (just a noise marker)
         if (msg.type == AgentMessageType.turnComplete) {
-          setState(() => _waiting = false);
+          setState(() {
+            _waiting = false;
+            // Remove all ephemeral messages from this turn
+            _messages.removeWhere((m) => ephemeral.contains(m.type));
+          });
           return;
         }
 
         setState(() {
-          // Agent started responding — hide waiting indicator
+          // First agent text → stop waiting
           if (msg.type == AgentMessageType.text) _waiting = false;
 
           if (msg.type == AgentMessageType.text && msg.streaming) {
@@ -94,16 +102,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     final text = _inputController.text.trim();
     if (text.isEmpty || _connection == null) return;
 
-    setState(() {
-      _messages.add(AgentMessage(
-        id: 'local-${DateTime.now().millisecondsSinceEpoch}',
-        type: AgentMessageType.user,
-        content: text,
-        timestamp: DateTime.now(),
-      ));
-      _waiting = true;
-    });
-
+    // Don't add locally — server echoes back as user_message,
+    // which also survives history replay on re-enter.
+    setState(() => _waiting = true);
     _connection!.sendMessage(text);
     _inputController.clear();
     _scrollToBottom();
@@ -164,29 +165,10 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                   )
                 : AgentChat(
                     messages: _messages,
-                    scrollController: _scrollController),
+                    scrollController: _scrollController,
+                    waiting: _waiting,
+                  ),
           ),
-          if (_waiting)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 16, height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text('Agent 思考中...',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
