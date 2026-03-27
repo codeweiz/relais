@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ class TerminalViewWidget extends StatefulWidget {
 
 class _TerminalViewWidgetState extends State<TerminalViewWidget> {
   late final Terminal _terminal;
+  StreamSubscription? _outputSubscription;
 
   @override
   void initState() {
@@ -35,7 +37,7 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
     };
 
     // Server output → terminal
-    widget.connection.output.listen((Uint8List data) {
+    _outputSubscription = widget.connection.output.listen((Uint8List data) {
       _terminal.write(utf8.decode(data, allowMalformed: true));
     });
 
@@ -89,6 +91,7 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
 
   @override
   void dispose() {
+    _outputSubscription?.cancel();
     widget.connection.dispose();
     super.dispose();
   }

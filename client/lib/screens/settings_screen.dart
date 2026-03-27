@@ -39,6 +39,31 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
 
+          // ── Language ──────────────────────────────────
+          const SizedBox(height: 24),
+          Text('Language', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 12),
+          Card.filled(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Language', style: Theme.of(context).textTheme.bodyLarge),
+                  const SizedBox(height: 8),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'zh', label: Text('简体中文')),
+                      ButtonSegment(value: 'en', label: Text('English')),
+                    ],
+                    selected: {settings.locale},
+                    onSelectionChanged: (s) => ref.read(settingsProvider.notifier).setLocale(s.first),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           // ── Terminal ───────────────────────────────────
           const SizedBox(height: 24),
           Text('Terminal', style: Theme.of(context).textTheme.titleMedium),

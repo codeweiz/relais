@@ -14,6 +14,19 @@ class SessionSwitcher extends ConsumerWidget {
     required this.filterKind,
   });
 
+  String _formatTime(String isoTime) {
+    try {
+      final dt = DateTime.parse(isoTime);
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 1) return 'just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      return '${diff.inDays}d ago';
+    } catch (_) {
+      return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sessions = ref.watch(sessionProvider);
@@ -54,17 +67,26 @@ class SessionSwitcher extends ConsumerWidget {
               child: Row(
                 children: [
                   Icon(
-                    isCurrent ? Icons.check : Icons.swap_horiz,
+                    isCurrent ? Icons.check : (s.isAgent ? Icons.smart_toy : Icons.terminal),
                     size: 16,
                     color: isCurrent
                         ? Theme.of(context).colorScheme.primary
                         : null,
                   ),
                   const SizedBox(width: 8),
-                  Text(s.name),
-                  const Spacer(),
-                  Text(s.id.substring(0, 6),
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(s.name, style: const TextStyle(fontSize: 14)),
+                        Text(
+                          '${s.id.substring(0, 8)} · ${_formatTime(s.createdAt)}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             );

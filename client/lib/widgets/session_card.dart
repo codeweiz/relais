@@ -13,25 +13,46 @@ class SessionCard extends StatelessWidget {
     this.onDelete,
   });
 
+  String _formatTime(String isoTime) {
+    try {
+      final dt = DateTime.parse(isoTime);
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 1) return 'just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      return '${diff.inDays}d ago';
+    } catch (_) {
+      return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Card.filled(
+      margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        leading: Icon(
-          session.isAgent ? Icons.smart_toy : Icons.terminal,
-          color: colorScheme.primary,
+        leading: CircleAvatar(
+          backgroundColor: colorScheme.primaryContainer,
+          child: Icon(
+            session.isAgent ? Icons.smart_toy : Icons.terminal,
+            color: colorScheme.primary,
+            size: 20,
+          ),
         ),
-        title: Text(session.name),
-        subtitle: Text(session.id),
+        title: Text(session.name, style: const TextStyle(fontWeight: FontWeight.w500)),
+        subtitle: Text(
+          '${session.id.substring(0, 8)} · ${_formatTime(session.createdAt)}',
+          style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+        ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             _StatusChip(status: session.status),
             if (onDelete != null)
               IconButton(
-                icon: const Icon(Icons.delete_outline),
+                icon: const Icon(Icons.delete_outline, size: 20),
                 onPressed: onDelete,
                 tooltip: 'Delete',
               ),

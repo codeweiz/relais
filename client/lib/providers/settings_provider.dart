@@ -7,12 +7,14 @@ class AppSettings {
   final double terminalFontSize;
   final bool terminalCursorBlink;
   final String defaultAgentProvider;
+  final String locale;
 
   const AppSettings({
     this.themeMode = ThemeMode.system,
     this.terminalFontSize = 14.0,
     this.terminalCursorBlink = true,
     this.defaultAgentProvider = 'claude-code',
+    this.locale = 'zh',
   });
 
   AppSettings copyWith({
@@ -20,12 +22,14 @@ class AppSettings {
     double? terminalFontSize,
     bool? terminalCursorBlink,
     String? defaultAgentProvider,
+    String? locale,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
       terminalFontSize: terminalFontSize ?? this.terminalFontSize,
       terminalCursorBlink: terminalCursorBlink ?? this.terminalCursorBlink,
       defaultAgentProvider: defaultAgentProvider ?? this.defaultAgentProvider,
+      locale: locale ?? this.locale,
     );
   }
 }
@@ -42,6 +46,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       terminalFontSize: prefs.getDouble('terminal_font_size') ?? 14.0,
       terminalCursorBlink: prefs.getBool('terminal_cursor_blink') ?? true,
       defaultAgentProvider: prefs.getString('default_agent_provider') ?? 'claude-code',
+      locale: prefs.getString('locale') ?? 'zh',
     );
   }
 
@@ -67,6 +72,12 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = state.copyWith(defaultAgentProvider: provider);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('default_agent_provider', provider);
+  }
+
+  Future<void> setLocale(String locale) async {
+    state = state.copyWith(locale: locale);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('locale', locale);
   }
 
   Future<void> clearSavedServers() async {
