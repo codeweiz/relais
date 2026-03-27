@@ -48,5 +48,8 @@ class S {
   static String minutesAgo(int n) => _t('${n}分钟前', '${n}m ago');
   static String hoursAgo(int n) => _t('${n}小时前', '${n}h ago');
   static String daysAgo(int n) => _t('${n}天前', '${n}d ago');
+  static String get noCommandsAvailable => _t('暂无可用命令', 'No commands available');
+  static String get loadingCommands => _t('加载命令中...', 'Loading commands...');
+  static String get slashCommandHint => _t('输入筛选命令...', 'Filter commands...');
   static String _t(String zh, String en) => locale == 'zh' ? zh : en;
 }
