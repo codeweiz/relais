@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -23,6 +24,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   String _status = 'connecting';
+  StreamSubscription? _messageSub;
+  StreamSubscription? _statusSub;
 
   @override
   void initState() {
@@ -35,9 +38,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         sessionId: widget.sessionId,
       );
 
-      _connection!.messages.listen((msg) {
+      _messageSub = _connection!.messages.listen((msg) {
+        if (!mounted) return;
         setState(() {
-          // For streaming text, replace last message with same id
           if (msg.type == AgentMessageType.text && msg.streaming) {
             final idx = _messages.indexWhere((m) => m.id == msg.id);
             if (idx >= 0) {
@@ -52,7 +55,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         _scrollToBottom();
       });
 
-      _connection!.status.listen((s) {
+      _statusSub = _connection!.status.listen((s) {
+        if (!mounted) return;
         setState(() => _status = s);
       });
 
@@ -93,6 +97,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
   @override
   void dispose() {
+    _messageSub?.cancel();
+    _statusSub?.cancel();
     _connection?.dispose();
     _inputController.dispose();
     _scrollController.dispose();
