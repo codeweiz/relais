@@ -67,8 +67,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     }
 
     _session!.sendMessage(text);
-    _inputController.clear();
-    setState(() {}); // Ensure UI updates after clear
+    _inputController.value = TextEditingValue.empty;
     _scrollToBottom();
   }
 
@@ -88,7 +87,12 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     await _speech.listen(
       localeId: 'zh-CN',
       onResult: (result) {
+        if (!_isListening) return; // Ignore late callbacks after cancel/send
         _inputController.text = result.recognizedWords;
+        // Move cursor to end
+        _inputController.selection = TextSelection.collapsed(
+          offset: _inputController.text.length,
+        );
         if (result.finalResult) {
           setState(() => _isListening = false);
         }
