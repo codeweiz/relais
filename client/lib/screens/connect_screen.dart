@@ -1,15 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../providers/server_provider.dart';
+import '../models/server.dart';
 
-class ConnectScreen extends StatefulWidget {
+class ConnectScreen extends ConsumerStatefulWidget {
   const ConnectScreen({super.key});
 
   @override
-  State<ConnectScreen> createState() => _ConnectScreenState();
+  ConsumerState<ConnectScreen> createState() => _ConnectScreenState();
 }
 
-class _ConnectScreenState extends State<ConnectScreen> {
+class _ConnectScreenState extends ConsumerState<ConnectScreen> {
   final _urlController = TextEditingController();
   final _tokenController = TextEditingController();
+  List<Server> _savedServers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedServers();
+  }
+
+  Future<void> _loadSavedServers() async {
+    final servers = await ref.read(serverProvider.notifier).loadSavedServers();
+    setState(() => _savedServers = servers);
+  }
 
   @override
   void dispose() {
@@ -18,66 +34,112 @@ class _ConnectScreenState extends State<ConnectScreen> {
     super.dispose();
   }
 
+  Future<void> _connect() async {
+    final url = _urlController.text.trim();
+    final token = _tokenController.text.trim();
+    if (url.isEmpty || token.isEmpty) return;
+
+    await ref.read(serverProvider.notifier).connect(url, token);
+    final state = ref.read(serverProvider);
+    if (state.isConnected && mounted) {
+      context.go('/home');
+    } else if (state.error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Connection failed: ${state.error}')),
+      );
+    }
+  }
+
+  void _selectServer(Server server) {
+    _urlController.text = server.url;
+    _tokenController.text = server.token;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(serverProvider);
+
     return Scaffold(
       body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.terminal_rounded,
-                  size: 64,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Relais',
-                  style: Theme.of(context).textTheme.headlineLarge,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Connect to a server',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-                const SizedBox(height: 32),
-                TextField(
-                  controller: _urlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Server URL',
-                    hintText: 'https://your-server.example.com',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.dns_outlined),
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.terminal_rounded,
+                    size: 64,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _tokenController,
-                  decoration: const InputDecoration(
-                    labelText: 'Token',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.key_outlined),
+                  const SizedBox(height: 16),
+                  Text('Relais',
+                      style: Theme.of(context).textTheme.headlineLarge),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Connect to a server',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                   ),
-                  obscureText: true,
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Connection not yet implemented')),
-                    );
-                  },
-                  icon: const Icon(Icons.link),
-                  label: const Text('Connect'),
-                ),
-              ],
+                  const SizedBox(height: 32),
+                  TextField(
+                    controller: _urlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Server URL',
+                      hintText: 'http://192.168.1.100:3000',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.dns_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _tokenController,
+                    decoration: const InputDecoration(
+                      labelText: 'Token',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.key_outlined),
+                    ),
+                    obscureText: true,
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: state.connecting ? null : _connect,
+                      icon: state.connecting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.link),
+                      label: Text(
+                          state.connecting ? 'Connecting...' : 'Connect'),
+                    ),
+                  ),
+                  if (_savedServers.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Saved Servers',
+                          style: Theme.of(context).textTheme.titleSmall),
+                    ),
+                    const SizedBox(height: 8),
+                    ...(_savedServers.map((s) => Card.filled(
+                          child: ListTile(
+                            leading: const Icon(Icons.dns),
+                            title: Text(s.name),
+                            subtitle: Text(s.url),
+                            onTap: () => _selectServer(s),
+                            trailing: const Icon(Icons.chevron_right),
+                          ),
+                        ))),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
