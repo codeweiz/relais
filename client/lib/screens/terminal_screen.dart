@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../models/session.dart';
 import '../providers/server_provider.dart';
 import '../providers/settings_provider.dart';
@@ -64,7 +65,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
         toolbarHeight: 36,
         titleSpacing: 0,
         leading: BackButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => context.go('/home'),
           style: const ButtonStyle(iconSize: WidgetStatePropertyAll(18)),
         ),
         title: Row(

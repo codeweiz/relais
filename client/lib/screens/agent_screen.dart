@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../models/session.dart';
 import '../providers/server_provider.dart';
 import '../services/agent_connection.dart';
@@ -105,6 +106,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: BackButton(onPressed: () => context.go('/home')),
         title: SessionSwitcher(
           currentSessionId: widget.sessionId,
           filterKind: SessionKind.agent,

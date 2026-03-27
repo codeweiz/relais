@@ -5,16 +5,27 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppSettings {
   final ThemeMode themeMode;
   final double terminalFontSize;
+  final bool terminalCursorBlink;
+  final String defaultAgentProvider;
 
   const AppSettings({
     this.themeMode = ThemeMode.system,
     this.terminalFontSize = 14.0,
+    this.terminalCursorBlink = true,
+    this.defaultAgentProvider = 'claude-code',
   });
 
-  AppSettings copyWith({ThemeMode? themeMode, double? terminalFontSize}) {
+  AppSettings copyWith({
+    ThemeMode? themeMode,
+    double? terminalFontSize,
+    bool? terminalCursorBlink,
+    String? defaultAgentProvider,
+  }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
       terminalFontSize: terminalFontSize ?? this.terminalFontSize,
+      terminalCursorBlink: terminalCursorBlink ?? this.terminalCursorBlink,
+      defaultAgentProvider: defaultAgentProvider ?? this.defaultAgentProvider,
     );
   }
 }
@@ -26,11 +37,11 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final themeName = prefs.getString('theme_mode') ?? 'system';
-    final fontSize = prefs.getDouble('terminal_font_size') ?? 14.0;
     state = AppSettings(
-      themeMode: _parseThemeMode(themeName),
-      terminalFontSize: fontSize,
+      themeMode: _parseThemeMode(prefs.getString('theme_mode') ?? 'system'),
+      terminalFontSize: prefs.getDouble('terminal_font_size') ?? 14.0,
+      terminalCursorBlink: prefs.getBool('terminal_cursor_blink') ?? true,
+      defaultAgentProvider: prefs.getString('default_agent_provider') ?? 'claude-code',
     );
   }
 
@@ -44,6 +55,23 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = state.copyWith(terminalFontSize: size);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('terminal_font_size', size);
+  }
+
+  Future<void> setTerminalCursorBlink(bool blink) async {
+    state = state.copyWith(terminalCursorBlink: blink);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('terminal_cursor_blink', blink);
+  }
+
+  Future<void> setDefaultAgentProvider(String provider) async {
+    state = state.copyWith(defaultAgentProvider: provider);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('default_agent_provider', provider);
+  }
+
+  Future<void> clearSavedServers() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('saved_servers');
   }
 
   static ThemeMode _parseThemeMode(String name) {

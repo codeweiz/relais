@@ -11,6 +11,7 @@ import 'screens/agent_screen.dart';
 import 'screens/settings_screen.dart';
 
 final _router = GoRouter(
+  initialLocation: '/',
   routes: [
     GoRoute(
       path: '/',
@@ -20,16 +21,21 @@ final _router = GoRouter(
       path: '/home',
       builder: (context, state) => const HomeScreen(),
     ),
+    // Terminal and agent as sub-routes of /home so back works
     GoRoute(
       path: '/terminal/:id',
-      builder: (context, state) => TerminalScreen(
-        sessionId: state.pathParameters['id']!,
+      pageBuilder: (context, state) => CustomTransitionPage(
+        key: ValueKey('terminal-${state.pathParameters['id']}'),
+        child: TerminalScreen(sessionId: state.pathParameters['id']!),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) => child,
       ),
     ),
     GoRoute(
       path: '/agent/:id',
-      builder: (context, state) => AgentScreen(
-        sessionId: state.pathParameters['id']!,
+      pageBuilder: (context, state) => CustomTransitionPage(
+        key: ValueKey('agent-${state.pathParameters['id']}'),
+        child: AgentScreen(sessionId: state.pathParameters['id']!),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) => child,
       ),
     ),
     GoRoute(
