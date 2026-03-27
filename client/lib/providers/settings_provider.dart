@@ -5,14 +5,14 @@ import '../l10n/strings.dart';
 
 class AppSettings {
   final ThemeMode themeMode;
-  final double terminalFontSize;
+  final double fontSize;
   final bool terminalCursorBlink;
   final String defaultAgentProvider;
   final String locale;
 
   const AppSettings({
     this.themeMode = ThemeMode.system,
-    this.terminalFontSize = 14.0,
+    this.fontSize = 14.0,
     this.terminalCursorBlink = true,
     this.defaultAgentProvider = 'claude-code',
     this.locale = 'zh',
@@ -20,14 +20,14 @@ class AppSettings {
 
   AppSettings copyWith({
     ThemeMode? themeMode,
-    double? terminalFontSize,
+    double? fontSize,
     bool? terminalCursorBlink,
     String? defaultAgentProvider,
     String? locale,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
-      terminalFontSize: terminalFontSize ?? this.terminalFontSize,
+      fontSize: fontSize ?? this.fontSize,
       terminalCursorBlink: terminalCursorBlink ?? this.terminalCursorBlink,
       defaultAgentProvider: defaultAgentProvider ?? this.defaultAgentProvider,
       locale: locale ?? this.locale,
@@ -46,7 +46,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     S.locale = locale;
     state = AppSettings(
       themeMode: _parseThemeMode(prefs.getString('theme_mode') ?? 'system'),
-      terminalFontSize: prefs.getDouble('terminal_font_size') ?? 14.0,
+      fontSize: prefs.getDouble('terminal_font_size') ?? 14.0,
       terminalCursorBlink: prefs.getBool('terminal_cursor_blink') ?? true,
       defaultAgentProvider: prefs.getString('default_agent_provider') ?? 'claude-code',
       locale: locale,
@@ -59,8 +59,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     await prefs.setString('theme_mode', mode.name);
   }
 
-  Future<void> setTerminalFontSize(double size) async {
-    state = state.copyWith(terminalFontSize: size);
+  Future<void> setFontSize(double size) async {
+    state = state.copyWith(fontSize: size);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('terminal_font_size', size);
   }

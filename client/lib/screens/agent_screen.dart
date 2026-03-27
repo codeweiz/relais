@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../models/session.dart';
 import '../providers/server_provider.dart';
+import '../providers/settings_provider.dart';
 import '../providers/agent_provider.dart';
 import '../widgets/agent_chat.dart';
 import '../widgets/session_switcher.dart';
@@ -59,9 +60,9 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     final text = _inputController.text.trim();
     if (text.isEmpty || _session == null) return;
 
-    // Stop voice if active
+    // Cancel voice if active — cancel() doesn't fire a final result callback
     if (_isListening) {
-      _speech.stop();
+      _speech.cancel();
       _isListening = false;
     }
 
@@ -111,6 +112,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     }
 
     final session = _session!;
+    final settings = ref.watch(settingsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -153,6 +155,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                     messages: session.messages,
                     scrollController: _scrollController,
                     waiting: session.waiting,
+                    fontSize: settings.fontSize,
                   ),
           ),
           Container(

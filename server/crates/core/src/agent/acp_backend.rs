@@ -26,6 +26,11 @@ enum AcpCmd {
         text: String,
         done_tx: oneshot::Sender<Result<(), String>>,
     },
+    /// Write raw text directly to the agent's stdin (for slash commands).
+    WriteStdin {
+        text: String,
+        done_tx: oneshot::Sender<Result<(), String>>,
+    },
     Shutdown,
 }
 
@@ -110,6 +115,21 @@ impl AcpBackend {
             .await
             .map_err(|_| "ACP thread gone".to_string())?;
         Ok(())
+    }
+
+    /// Write raw text directly to the agent's stdin.
+    /// Used for slash commands that need to bypass ACP and go to the CLI REPL.
+    pub async fn write_stdin(&self, text: &str) -> Result<(), String> {
+        let cmd_tx = self.cmd_tx.as_ref().ok_or("Agent not started")?;
+        let (done_tx, done_rx) = oneshot::channel();
+        cmd_tx
+            .send(AcpCmd::WriteStdin {
+                text: text.to_string(),
+                done_tx,
+            })
+            .await
+            .map_err(|_| "ACP thread gone".to_string())?;
+        done_rx.await.map_err(|_| "ACP thread gone".to_string())?
     }
 
     /// Subscribe to the `AgentEvent` broadcast stream.
@@ -273,6 +293,33 @@ async fn acp_session_loop(
                     ))
                     .await;
                 tracing::debug!("[{}-acp] prompt returned: {:?}", kind, result.is_ok());
+                match result {
+                    Ok(_) => {
+                        let _ = event_tx.send(AgentEvent::TurnComplete {
+                            session_id: Some(session_id.to_string()),
+                            cost_usd: None,
+                        });
+                        let _ = done_tx.send(Ok(()));
+                    }
+                    Err(e) => {
+                        let err = format!("ACP prompt error: {}", e);
+                        let _ = event_tx.send(AgentEvent::Error(err.clone()));
+                        let _ = done_tx.send(Err(err));
+                    }
+                }
+            }
+            AcpCmd::WriteStdin { text, done_tx } => {
+                // Slash commands: send as a regular prompt — Claude Code CLI
+                // recognises slash commands in the message content even in
+                // stream-json mode.
+                tracing::debug!("[{}-acp] writing stdin (slash cmd): {}", kind, &text);
+                let text_content = acp::ContentBlock::Text(acp::TextContent::new(text.trim()));
+                let result = conn
+                    .prompt(acp::PromptRequest::new(
+                        session_id.clone(),
+                        vec![text_content],
+                    ))
+                    .await;
                 match result {
                     Ok(_) => {
                         let _ = event_tx.send(AgentEvent::TurnComplete {

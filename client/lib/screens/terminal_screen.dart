@@ -86,7 +86,7 @@ class _TerminalScreenState extends ConsumerState<TerminalScreen> {
           Expanded(
             child: TerminalViewWidget(
               terminal: session.terminal,
-              fontSize: settings.terminalFontSize,
+              fontSize: settings.fontSize,
             ),
           ),
           if (isMobile)

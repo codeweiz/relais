@@ -4,13 +4,14 @@ import '../models/agent_message.dart';
 
 class MessageBubble extends StatelessWidget {
   final AgentMessage message;
-  const MessageBubble({super.key, required this.message});
+  final double? fontSize;
+  const MessageBubble({super.key, required this.message, this.fontSize});
 
   @override
   Widget build(BuildContext context) {
     return switch (message.type) {
-      AgentMessageType.user => _UserBubble(message: message),
-      AgentMessageType.text => _AgentTextBubble(message: message),
+      AgentMessageType.user => _UserBubble(message: message, fontSize: fontSize),
+      AgentMessageType.text => _AgentTextBubble(message: message, fontSize: fontSize),
       AgentMessageType.thinking => _ThinkingBubble(message: message),
       AgentMessageType.toolUse => _ToolUseBubble(message: message),
       AgentMessageType.toolResult => _ToolResultBubble(message: message),
@@ -23,7 +24,8 @@ class MessageBubble extends StatelessWidget {
 
 class _UserBubble extends StatelessWidget {
   final AgentMessage message;
-  const _UserBubble({required this.message});
+  final double? fontSize;
+  const _UserBubble({required this.message, this.fontSize});
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +45,10 @@ class _UserBubble extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
         ),
         child: Text('$prefix${message.content}',
-            style: TextStyle(color: colorScheme.onPrimaryContainer)),
+            style: TextStyle(
+              color: colorScheme.onPrimaryContainer,
+              fontSize: fontSize,
+            )),
       ),
     );
   }
@@ -51,11 +56,19 @@ class _UserBubble extends StatelessWidget {
 
 class _AgentTextBubble extends StatelessWidget {
   final AgentMessage message;
-  const _AgentTextBubble({required this.message});
+  final double? fontSize;
+  const _AgentTextBubble({required this.message, this.fontSize});
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final baseSheet = MarkdownStyleSheet.fromTheme(Theme.of(context));
+    final styleSheet = fontSize != null
+        ? baseSheet.copyWith(
+            p: baseSheet.p?.copyWith(fontSize: fontSize) ??
+                TextStyle(fontSize: fontSize),
+          )
+        : baseSheet;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
@@ -70,7 +83,7 @@ class _AgentTextBubble extends StatelessWidget {
         child: MarkdownBody(
           data: message.content,
           selectable: true,
-          styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)),
+          styleSheet: styleSheet,
         ),
       ),
     );

@@ -6,12 +6,14 @@ class AgentChat extends StatelessWidget {
   final List<AgentMessage> messages;
   final ScrollController scrollController;
   final bool waiting;
+  final double? fontSize;
 
   const AgentChat({
     super.key,
     required this.messages,
     required this.scrollController,
     this.waiting = false,
+    this.fontSize,
   });
 
   @override
@@ -24,7 +26,7 @@ class AgentChat extends StatelessWidget {
       itemCount: itemCount,
       itemBuilder: (context, index) {
         if (index < messages.length) {
-          return MessageBubble(message: messages[index]);
+          return MessageBubble(message: messages[index], fontSize: fontSize);
         }
         // Last item: waiting indicator
         return Padding(

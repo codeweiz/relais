@@ -187,6 +187,11 @@ impl AgentManager {
             )
             .await;
 
+        // Slash commands: write directly to stdin so the CLI handles them
+        if text.starts_with('/') {
+            return agent.backend.write_stdin(&format!("{}\n", text)).await;
+        }
+
         agent.backend.send_message_fire(&text).await
     }
 

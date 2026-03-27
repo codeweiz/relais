@@ -79,15 +79,15 @@ class SettingsScreen extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(S.fontSize, style: Theme.of(context).textTheme.bodyLarge),
-                      Text('${settings.terminalFontSize.round()}px', style: Theme.of(context).textTheme.bodyMedium),
+                      Text('${settings.fontSize.round()}px', style: Theme.of(context).textTheme.bodyMedium),
                     ],
                   ),
                   Slider(
-                    value: settings.terminalFontSize,
+                    value: settings.fontSize,
                     min: 10,
                     max: 24,
                     divisions: 14,
-                    onChanged: (v) => ref.read(settingsProvider.notifier).setTerminalFontSize(v),
+                    onChanged: (v) => ref.read(settingsProvider.notifier).setFontSize(v),
                   ),
                   const Divider(),
                   SwitchListTile(
