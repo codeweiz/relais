@@ -24,6 +24,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   String _status = 'connecting';
+  bool _waiting = false;
   StreamSubscription? _messageSub;
   StreamSubscription? _statusSub;
 
@@ -40,7 +41,20 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
       _messageSub = _connection!.messages.listen((msg) {
         if (!mounted) return;
+
+        // Skip echoed user messages from server (we added them locally)
+        if (msg.type == AgentMessageType.user && msg.source == 'web') return;
+
+        // Skip turn_complete (just a noise marker)
+        if (msg.type == AgentMessageType.turnComplete) {
+          setState(() => _waiting = false);
+          return;
+        }
+
         setState(() {
+          // Agent started responding — hide waiting indicator
+          if (msg.type == AgentMessageType.text) _waiting = false;
+
           if (msg.type == AgentMessageType.text && msg.streaming) {
             final idx = _messages.indexWhere((m) => m.id == msg.id);
             if (idx >= 0) {
@@ -80,7 +94,6 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     final text = _inputController.text.trim();
     if (text.isEmpty || _connection == null) return;
 
-    // Add user message locally
     setState(() {
       _messages.add(AgentMessage(
         id: 'local-${DateTime.now().millisecondsSinceEpoch}',
@@ -88,6 +101,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         content: text,
         timestamp: DateTime.now(),
       ));
+      _waiting = true;
     });
 
     _connection!.sendMessage(text);
@@ -152,6 +166,27 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                     messages: _messages,
                     scrollController: _scrollController),
           ),
+          if (_waiting)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 16, height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text('Agent 思考中...',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
