@@ -117,10 +117,16 @@ async fn handle_terminal(socket: WebSocket, state: AppState, session_id: String)
                                 // then send capture-pane at correct dimensions.
                                 if !got_initial_resize {
                                     got_initial_resize = true;
+                                    // Wait for tmux to re-render at new dimensions
                                     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                                     if let Ok(initial) = relais_core::pty::tmux::capture_pane(&session_id) {
                                         if !initial.is_empty() {
-                                            let _ = ws_tx.send(Message::Binary(initial.into())).await;
+                                            // Prepend ESC[2J (clear screen) + ESC[H (cursor home)
+                                            // so the client's xterm clears stale content before
+                                            // drawing the fresh capture. tmux history is unaffected.
+                                            let mut payload = b"\x1b[2J\x1b[H".to_vec();
+                                            payload.extend_from_slice(&initial);
+                                            let _ = ws_tx.send(Message::Binary(payload.into())).await;
                                         }
                                     }
                                 }
