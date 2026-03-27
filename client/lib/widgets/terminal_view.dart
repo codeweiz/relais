@@ -36,12 +36,16 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
     _terminal.onResize = (cols, rows, pixelWidth, pixelHeight) {
       if (!_connected) {
         _connected = true;
-        // Connect and immediately send resize so server has correct size
-        // before capture-pane fires
+        // Connect, send resize, then listen for output.
+        // Server waits for resize before sending capture-pane,
+        // ensuring content matches terminal dimensions.
         widget.connection.connect();
         widget.connection.resize(cols, rows);
 
-        // Start listening to output after connect
+        // Clear terminal before receiving capture-pane data
+        // to prevent stale content from a previous connection
+        _terminal.write('\x1b[2J\x1b[H'); // ESC[2J = clear screen, ESC[H = cursor home
+
         _outputSubscription = widget.connection.output.listen((Uint8List data) {
           _terminal.write(utf8.decode(data, allowMalformed: true));
         });
