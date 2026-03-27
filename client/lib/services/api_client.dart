@@ -34,7 +34,7 @@ class ApiClient {
   }) async {
     final resp = await _dio.post('/api/v1/sessions', data: {
       'name': name,
-      'session_type': type,
+      'type': type,
       if (provider != null) 'provider': provider,
       if (model != null) 'model': model,
       if (cwd != null) 'cwd': cwd,

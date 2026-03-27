@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -31,6 +32,9 @@ class TerminalConnection {
       (data) {
         if (data is List<int>) {
           _outputController.add(Uint8List.fromList(data));
+        } else if (data is String) {
+          // On Flutter Web, WebSocket may deliver data as String
+          _outputController.add(Uint8List.fromList(utf8.encode(data)));
         }
       },
       onError: (error) {

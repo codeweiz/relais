@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
@@ -27,7 +28,7 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
 
     // Pipe connection output to terminal
     widget.connection.output.listen((Uint8List data) {
-      _terminal.write(String.fromCharCodes(data));
+      _terminal.write(utf8.decode(data, allowMalformed: true));
     });
 
     // Connect
