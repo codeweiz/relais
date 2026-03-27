@@ -17,3 +17,6 @@ server/plugins/*/target/
 
 # Config (local secrets)
 *.local.toml
+
+# Superpowers brainstorm sessions
+.superpowers/
