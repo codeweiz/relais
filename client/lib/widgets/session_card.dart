@@ -44,7 +44,7 @@ class SessionCard extends StatelessWidget {
         ),
         title: Text(session.name, style: const TextStyle(fontWeight: FontWeight.w500)),
         subtitle: Text(
-          '${session.id.substring(0, 8)} · ${_formatTime(session.createdAt)}',
+          '${session.id.substring(0, 8)} · ${_formatTime(session.lastActive)}',
           style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
         ),
         trailing: Row(

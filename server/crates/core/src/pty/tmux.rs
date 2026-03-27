@@ -252,9 +252,9 @@ pub fn capture_pane(session_id: &str) -> Result<Vec<u8>> {
     let name = session_name(session_id);
     debug!(session = %name, "capturing tmux pane");
 
-    // Try with -e (escape sequences, tmux 3.1+) and -J (join wrapped lines) first
+    // Try with -e (escape sequences, tmux 3.1+) first
     let output = Command::new("tmux")
-        .args(["capture-pane", "-t", &name, "-p", "-e", "-J"])
+        .args(["capture-pane", "-t", &name, "-p", "-e"])
         .output()
         .context("failed to execute tmux capture-pane")?;
     if output.status.success() {
@@ -262,7 +262,7 @@ pub fn capture_pane(session_id: &str) -> Result<Vec<u8>> {
     }
 
     // Fallback without -e for older tmux
-    let output = run_tmux_ok(&["capture-pane", "-t", &name, "-p", "-J"])?;
+    let output = run_tmux_ok(&["capture-pane", "-t", &name, "-p"])?;
     Ok(strip_trailing_blank_lines(&output.stdout))
 }
 

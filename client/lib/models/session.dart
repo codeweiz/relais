@@ -18,6 +18,7 @@ class Session {
   final SessionStatus status;
   final String? parentId;
   final String createdAt;
+  final String lastActive;
   final int? exitCode;
   final String? shell;
   final int cols;
@@ -30,6 +31,7 @@ class Session {
     required this.status,
     this.parentId,
     required this.createdAt,
+    required this.lastActive,
     this.exitCode,
     this.shell,
     this.cols = 80,
@@ -43,6 +45,7 @@ class Session {
     status: SessionStatus.fromString(json['status'] as String? ?? 'running'),
     parentId: json['parent_id'] as String?,
     createdAt: json['created_at'] as String? ?? '',
+    lastActive: json['last_active'] as String? ?? json['created_at'] as String? ?? '',
     exitCode: json['exit_code'] as int?,
     shell: json['shell'] as String?,
     cols: json['cols'] as int? ?? 80,

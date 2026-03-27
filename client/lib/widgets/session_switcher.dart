@@ -81,7 +81,7 @@ class SessionSwitcher extends ConsumerWidget {
                       children: [
                         Text(s.name, style: const TextStyle(fontSize: 14)),
                         Text(
-                          '${s.id.substring(0, 8)} · ${_formatTime(s.createdAt)}',
+                          '${s.id.substring(0, 8)} · ${_formatTime(s.lastActive)}',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
                         ),
                       ],

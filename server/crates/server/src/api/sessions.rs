@@ -56,6 +56,7 @@ pub struct SessionInfo {
     pub status: String,
     pub parent_id: Option<String>,
     pub created_at: String,
+    pub last_active: String,
     pub exit_code: Option<i32>,
     pub shell: Option<String>,
     pub cols: u16,
@@ -82,6 +83,14 @@ pub async fn list_sessions(State(state): State<AppState>) -> impl IntoResponse {
             PtyStatus::Running => ("running".to_string(), None),
             PtyStatus::Exited(code) => ("exited".to_string(), Some(code)),
         };
+        // Try to get last_active from session store metadata
+        let last_active = state
+            .core
+            .session_store
+            .get_meta(&s.id)
+            .map(|m| m.last_active.to_rfc3339())
+            .unwrap_or_else(|_| s.created_at.to_rfc3339());
+
         list.push(SessionInfo {
             id: s.id,
             name: s.name,
@@ -89,6 +98,7 @@ pub async fn list_sessions(State(state): State<AppState>) -> impl IntoResponse {
             status,
             parent_id: None,
             created_at: s.created_at.to_rfc3339(),
+            last_active,
             exit_code,
             shell: Some(s.shell),
             cols: 80,
@@ -115,6 +125,7 @@ pub async fn list_sessions(State(state): State<AppState>) -> impl IntoResponse {
             status: status.to_string(),
             parent_id,
             created_at: agent_created_at.to_rfc3339(),
+            last_active: agent_created_at.to_rfc3339(),
             exit_code: None,
             shell: None,
             cols: 0,

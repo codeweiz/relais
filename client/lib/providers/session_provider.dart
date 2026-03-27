@@ -17,7 +17,7 @@ class SessionNotifier extends StateNotifier<AsyncValue<List<Session>>> {
     state = const AsyncValue.loading();
     try {
       final sessions = await api.getSessions();
-      sessions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      sessions.sort((a, b) => b.lastActive.compareTo(a.lastActive));
       state = AsyncValue.data(sessions);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
