@@ -1,11 +1,12 @@
 use axum::{
-    http::StatusCode,
+    http::{HeaderValue, Method, StatusCode},
     middleware,
     response::IntoResponse,
     routing::{delete, get, patch, post},
     Json, Router,
 };
 use serde::Serialize;
+use tower_http::cors::CorsLayer;
 
 use crate::{
     api::{plugins, sessions, status, tasks, token, tunnel},
@@ -94,6 +95,14 @@ pub fn create_router(state: AppState) -> Router {
         .merge(ws_routes)
         // API-only server: return 404 for non-API paths
         .fallback(|| async { StatusCode::NOT_FOUND })
+        // CORS: allow any origin (client runs on different port/domain)
+        .layer(
+            CorsLayer::new()
+                .allow_origin(tower_http::cors::Any)
+                .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH, Method::OPTIONS])
+                .allow_headers(tower_http::cors::Any)
+                .expose_headers(tower_http::cors::Any),
+        )
         // Security headers on every response
         .layer(middleware::from_fn(security_headers))
         // Per-IP rate limiting + blocklist check (before auth)

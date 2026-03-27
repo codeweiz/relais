@@ -34,7 +34,27 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
     super.dispose();
   }
 
+  /// Parse a URL that may contain ?token= query param.
+  /// e.g. "http://127.0.0.1:3000?token=abc123" → url + token split.
+  void _parseUrlInput() {
+    final input = _urlController.text.trim();
+    try {
+      final uri = Uri.parse(input);
+      final tokenParam = uri.queryParameters['token'];
+      if (tokenParam != null && tokenParam.isNotEmpty) {
+        // Strip token from URL, put it in token field
+        final cleanUri = uri.replace(queryParameters: {});
+        final cleanUrl = cleanUri.toString().replaceAll('?', '').replaceAll(RegExp(r'/$'), '');
+        _urlController.text = cleanUrl;
+        _tokenController.text = tokenParam;
+      }
+    } catch (_) {
+      // Not a valid URL, ignore
+    }
+  }
+
   Future<void> _connect() async {
+    _parseUrlInput();
     final url = _urlController.text.trim();
     final token = _tokenController.text.trim();
     if (url.isEmpty || token.isEmpty) return;
@@ -90,10 +110,11 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
                     controller: _urlController,
                     decoration: const InputDecoration(
                       labelText: 'Server URL',
-                      hintText: 'http://192.168.1.100:3000',
+                      hintText: 'http://host:3000?token=xxx',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.dns_outlined),
                     ),
+                    onChanged: (_) => _parseUrlInput(),
                   ),
                   const SizedBox(height: 16),
                   TextField(
