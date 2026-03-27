@@ -19,11 +19,11 @@ class TerminalViewWidget extends StatefulWidget {
 class _TerminalViewWidgetState extends State<TerminalViewWidget> {
   late final Terminal _terminal;
   StreamSubscription? _outputSubscription;
+  bool _connected = false;
 
   @override
   void initState() {
     super.initState();
-    // Small scrollback — tmux handles scroll history server-side
     _terminal = Terminal(maxLines: 100);
 
     // Keyboard input → server (binary)
@@ -31,18 +31,24 @@ class _TerminalViewWidgetState extends State<TerminalViewWidget> {
       widget.connection.sendInput(data);
     };
 
-    // Use Terminal.onResize for accurate cols/rows from the actual rendering
+    // Wait for first resize before connecting — this ensures the server
+    // knows the correct terminal size before sending capture-pane content.
     _terminal.onResize = (cols, rows, pixelWidth, pixelHeight) {
-      widget.connection.resize(cols, rows);
+      if (!_connected) {
+        _connected = true;
+        // Connect and immediately send resize so server has correct size
+        // before capture-pane fires
+        widget.connection.connect();
+        widget.connection.resize(cols, rows);
+
+        // Start listening to output after connect
+        _outputSubscription = widget.connection.output.listen((Uint8List data) {
+          _terminal.write(utf8.decode(data, allowMalformed: true));
+        });
+      } else {
+        widget.connection.resize(cols, rows);
+      }
     };
-
-    // Server output → terminal
-    _outputSubscription = widget.connection.output.listen((Uint8List data) {
-      _terminal.write(utf8.decode(data, allowMalformed: true));
-    });
-
-    // Connect
-    widget.connection.connect();
   }
 
   @override

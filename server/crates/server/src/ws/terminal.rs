@@ -82,13 +82,10 @@ async fn handle_terminal(socket: WebSocket, state: AppState, session_id: String)
     let mut live_rx = session.subscribe();
     let mut status_rx = session.subscribe_status();
 
-    // Capture-pane on connect: send current screen content so a reconnecting
-    // client gets a full screen immediately without waiting for new output.
-    if let Ok(initial) = relais_core::pty::tmux::capture_pane(&session_id) {
-        if !initial.is_empty() {
-            let _ = ws_tx.send(Message::Binary(initial.into())).await;
-        }
-    }
+    // Wait for the client's first resize command before sending capture-pane.
+    // This ensures tmux has the correct dimensions so the captured content
+    // matches the client's terminal width and won't appear garbled.
+    let mut got_initial_resize = false;
 
     // Heartbeat: ping every 30 seconds
     let mut ping_interval = interval(Duration::from_secs(30));
@@ -118,6 +115,16 @@ async fn handle_terminal(socket: WebSocket, state: AppState, session_id: String)
                                 debug!(session_id = %session_id, cols, rows, "resize request");
                                 if let Err(e) = state.core.pty_manager.resize(&session_id, cols, rows) {
                                     warn!(session_id = %session_id, error = %e, "failed to resize PTY");
+                                }
+                                // After the first resize, send capture-pane so content
+                                // matches the client's actual terminal dimensions.
+                                if !got_initial_resize {
+                                    got_initial_resize = true;
+                                    if let Ok(initial) = relais_core::pty::tmux::capture_pane(&session_id) {
+                                        if !initial.is_empty() {
+                                            let _ = ws_tx.send(Message::Binary(initial.into())).await;
+                                        }
+                                    }
                                 }
                             }
                             Ok(ClientCommand::Keepalive { .. }) => {
