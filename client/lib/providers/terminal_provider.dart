@@ -44,17 +44,18 @@ class TerminalSession {
       } catch (_) {}
     });
 
-    connection.connect();
-
     final session = TerminalSession._(
       terminal: terminal,
       connection: connection,
       outputSub: outputSub,
     );
 
+    // Subscribe to status BEFORE connect so we don't miss the initial event
     connection.status.listen((s) {
       session.status = s;
     });
+
+    connection.connect();
 
     return session;
   }

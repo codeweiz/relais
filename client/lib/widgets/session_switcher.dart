@@ -41,7 +41,7 @@ class SessionSwitcher extends ConsumerWidget {
             orElse: () =>
                 filtered.isNotEmpty ? filtered.first : list.first,
           );
-          return Text(current.name, style: Theme.of(context).textTheme.bodyMedium);
+          return Text(current.name, style: DefaultTextStyle.of(context).style);
         }
 
         return PopupMenuButton<String>(
@@ -55,7 +55,7 @@ class SessionSwitcher extends ConsumerWidget {
                     .firstWhere((s) => s.id == currentSessionId,
                         orElse: () => filtered.first)
                     .name,
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: DefaultTextStyle.of(context).style,
               ),
               const Icon(Icons.arrow_drop_down, size: 18),
             ],
@@ -79,7 +79,7 @@ class SessionSwitcher extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(s.name, style: Theme.of(context).textTheme.bodyMedium),
+                        Text(s.name, style: DefaultTextStyle.of(context).style),
                         Text(
                           '${s.id.substring(0, 8)} · ${_formatTime(s.lastActive)}',
                           style: Theme.of(context).textTheme.labelSmall,

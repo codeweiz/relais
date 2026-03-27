@@ -175,6 +175,16 @@ impl AgentManager {
             .get(session_id)
             .ok_or_else(|| "Agent not running".to_string())?;
 
+        // Store user message in event history for replay on reconnect
+        if let Some(entry) = self.agents.get(session_id) {
+            if let Ok(mut history) = entry.event_history.lock() {
+                history.push(crate::agent::event::AgentEvent::UserMessage {
+                    text: text.clone(),
+                    source: source.to_string(),
+                });
+            }
+        }
+
         // Publish user message event so all frontends can see it
         self.event_bus
             .publish_data(
@@ -379,6 +389,11 @@ pub fn agent_event_to_data_event(seq: u64, event: &AgentEvent) -> DataEvent {
             message: message.clone(),
             severity: ErrorClass::Transient,
             guidance: String::new(),
+        },
+        AgentEvent::UserMessage { text, source } => DataEvent::AgentUserMessage {
+            seq,
+            text: text.clone(),
+            source: source.clone(),
         },
     }
 }

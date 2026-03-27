@@ -84,4 +84,6 @@ pub enum AgentEvent {
     },
     /// Error from the agent.
     Error(String),
+    /// User message sent to the agent (stored for history replay).
+    UserMessage { text: String, source: String },
 }
