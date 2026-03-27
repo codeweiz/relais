@@ -119,4 +119,8 @@ pub enum DataEvent {
         severity: ErrorClass,
         guidance: String,
     },
+    /// Available slash commands from the agent (no seq — metadata, not conversation).
+    AgentAvailableCommands {
+        commands: Vec<(String, String)>,
+    },
 }

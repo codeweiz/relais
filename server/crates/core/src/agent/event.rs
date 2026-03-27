@@ -56,6 +56,13 @@ impl std::fmt::Display for AgentKind {
     }
 }
 
+/// Metadata about a single slash command.
+#[derive(Debug, Clone)]
+pub struct SlashCommandInfo {
+    pub name: String,
+    pub description: String,
+}
+
 /// Events emitted by an agent backend, broadcast to all subscribers.
 #[derive(Debug, Clone)]
 pub enum AgentEvent {
@@ -86,4 +93,6 @@ pub enum AgentEvent {
     Error(String),
     /// User message sent to the agent (stored for history replay).
     UserMessage { text: String, source: String },
+    /// Available slash commands pushed by the agent.
+    AvailableCommands(Vec<SlashCommandInfo>),
 }
