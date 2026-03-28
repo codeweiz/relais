@@ -93,19 +93,72 @@ String _providerDisplayName(String id) {
 
 /// Colors for each provider.
 Color providerColor(String provider) {
-  switch (provider) {
+  switch (provider.toLowerCase()) {
     case 'claude-code':
     case 'claude':
-      return const Color(0xFF7C7CFF);
+      return const Color(0xFFE87B35); // Anthropic orange
+    case 'codex':
+    case 'openai':
+      return const Color(0xFF10A37F); // OpenAI green
     case 'gemini':
     case 'gemini-cli':
-      return const Color(0xFF4285F4);
-    case 'opencode':
-      return const Color(0xFF00BCD4);
-    case 'codex':
-      return const Color(0xFF4CD137);
+      return const Color(0xFF4285F4); // Google blue
     default:
-      return const Color(0xFF9E9E9E);
+      return const Color(0xFF9E9E9E); // grey
+  }
+}
+
+// ── Head shape system ────────────────────────────────────────────────────────
+
+enum HeadShape { circle, hexagon, diamond, roundedSquare }
+
+HeadShape providerHeadShape(String provider) {
+  switch (provider.toLowerCase()) {
+    case 'claude-code':
+    case 'claude':
+      return HeadShape.circle;
+    case 'codex':
+    case 'openai':
+      return HeadShape.hexagon;
+    case 'gemini':
+    case 'gemini-cli':
+      return HeadShape.diamond;
+    default:
+      return HeadShape.roundedSquare;
+  }
+}
+
+void drawHead(Canvas canvas, Offset center, double radius, HeadShape shape,
+    Paint paint) {
+  switch (shape) {
+    case HeadShape.circle:
+      canvas.drawCircle(center, radius, paint);
+    case HeadShape.hexagon:
+      final path = Path();
+      for (var i = 0; i < 6; i++) {
+        final angle = (i * 60 - 90) * math.pi / 180;
+        final p = Offset(center.dx + radius * math.cos(angle),
+            center.dy + radius * math.sin(angle));
+        i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+      }
+      path.close();
+      canvas.drawPath(path, paint);
+    case HeadShape.diamond:
+      final path = Path()
+        ..moveTo(center.dx, center.dy - radius)
+        ..lineTo(center.dx + radius * 0.85, center.dy)
+        ..lineTo(center.dx, center.dy + radius)
+        ..lineTo(center.dx - radius * 0.85, center.dy)
+        ..close();
+      canvas.drawPath(path, paint);
+    case HeadShape.roundedSquare:
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCircle(center: center, radius: radius),
+          Radius.circular(radius * 0.25),
+        ),
+        paint,
+      );
   }
 }
 
@@ -238,8 +291,8 @@ class OfficePainter extends CustomPainter {
 
 // ── Agent painter ─────────────────────────────────────────────────────────────
 
-/// Paints a single "Digital Employee": face, name badge, desk, status label,
-/// and an optional activity speech bubble.
+/// Paints a single "Digital Employee": provider-shaped head, name badge,
+/// status label, and an optional activity speech bubble.
 class AgentPainter extends CustomPainter {
   final AgentStatusInfo agent;
 
@@ -265,22 +318,15 @@ class AgentPainter extends CustomPainter {
   });
 
   // Layout constants
-  static const double _faceW = 54.0;
-  static const double _faceH = 48.0;
-  static const double _faceRadius = 10.0;
+  static const double _headRadius = 24.0;
 
   static const double _badgeH = 18.0;
   static const double _badgeRadius = 5.0;
 
-  static const double _deskW = 72.0;
-  static const double _deskEndH = 8.0;
-
-  // Vertical offsets from a logical "top" of the slot (y=0 of the widget)
-  // We place the face centred around y=70 in the slot (slot height = 200).
-  static const double _faceCY = 80.0; // face centre Y
-  static const double _badgeTopOffset = _faceH / 2 + 6;
-  static const double _deskTopOffset = _faceH / 2 + 6 + _badgeH + 8;
-  static const double _statusLabelOffset = _deskTopOffset + _deskEndH + 12;
+  // Vertical offsets — head centred in a 140x150 slot (no desk).
+  static const double _faceCY = 55.0; // head centre Y
+  static const double _badgeTopOffset = _headRadius + 6;
+  static const double _statusLabelOffset = _headRadius + 6 + _badgeH + 8;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -291,11 +337,10 @@ class AgentPainter extends CustomPainter {
     final sColor = statusColor(agent.status);
 
     _drawGlow(canvas, cx, cy, sColor);
-    _drawFace(canvas, cx, cy, pColor);
+    _drawHead(canvas, cx, cy, pColor);
     _drawEyes(canvas, cx, cy);
     _drawMouth(canvas, cx, cy);
     _drawNameBadge(canvas, cx, cy, pColor);
-    _drawDesk(canvas, cx, cy);
     _drawStatusLabel(canvas, cx, cy, sColor);
     if (agent.activity.isNotEmpty) {
       _drawActivityBubble(canvas, cx, cy, pColor);
@@ -305,61 +350,59 @@ class AgentPainter extends CustomPainter {
   // ── Glow behind face ──────────────────────────────────────────────────────
 
   void _drawGlow(Canvas canvas, double cx, double cy, Color sColor) {
-    double glowRadius = 48.0;
+    double glowRadius = 38.0;
     double glowAlpha = 0.18;
 
     switch (agent.status) {
       case 'idle':
         glowAlpha = 0.10;
-        glowRadius = 42;
+        glowRadius = 34;
       case 'working':
         glowAlpha = 0.35;
-        glowRadius = 54;
+        glowRadius = 42;
       case 'thinking':
         // Pulsing alpha
-        glowAlpha = 0.15 + 0.20 * ((math.sin(animationValue * math.pi * 2) + 1) / 2);
-        glowRadius = 52;
+        glowAlpha = 0.15 +
+            0.20 *
+                ((math.sin(animationValue * math.pi * 2) + 1) / 2);
+        glowRadius = 40;
       case 'tool_calling':
         glowAlpha = 0.28;
-        glowRadius = 50;
+        glowRadius = 38;
       case 'error':
         // Blinking glow
         glowAlpha = animationValue > 0.5 ? 0.40 : 0.10;
-        glowRadius = 50;
+        glowRadius = 38;
     }
 
+    final headShape = providerHeadShape(agent.provider);
     final glowPaint = Paint()
       ..shader = RadialGradient(
         colors: [
           sColor.withValues(alpha: glowAlpha),
           sColor.withValues(alpha: 0.0),
         ],
-      ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: glowRadius));
-    canvas.drawCircle(Offset(cx, cy), glowRadius, glowPaint);
+      ).createShader(
+          Rect.fromCircle(center: Offset(cx, cy), radius: glowRadius));
+    drawHead(canvas, Offset(cx, cy), glowRadius, headShape, glowPaint);
   }
 
-  // ── Face rectangle ────────────────────────────────────────────────────────
+  // ── Head (provider-specific shape) ─────────────────────────────────────────
 
-  void _drawFace(Canvas canvas, double cx, double cy, Color pColor) {
-    final faceRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(cx, cy),
-        width: _faceW,
-        height: _faceH,
-      ),
-      const Radius.circular(_faceRadius),
-    );
+  void _drawHead(Canvas canvas, double cx, double cy, Color pColor) {
+    final headShape = providerHeadShape(agent.provider);
+    final center = Offset(cx, cy);
 
     final fillPaint = Paint()
       ..color = pColor.withValues(alpha: 0.28)
       ..style = PaintingStyle.fill;
-    canvas.drawRRect(faceRect, fillPaint);
+    drawHead(canvas, center, _headRadius, headShape, fillPaint);
 
     final borderPaint = Paint()
       ..color = pColor.withValues(alpha: 0.60)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
-    canvas.drawRRect(faceRect, borderPaint);
+    drawHead(canvas, center, _headRadius, headShape, borderPaint);
   }
 
   // ── Eyes ──────────────────────────────────────────────────────────────────
@@ -505,35 +548,6 @@ class AgentPainter extends CustomPainter {
     );
   }
 
-  // ── Desk ──────────────────────────────────────────────────────────────────
-
-  void _drawDesk(Canvas canvas, double cx, double cy) {
-    final deskY = cy + _deskTopOffset;
-    final paint = Paint()
-      ..color = labelColor.withValues(alpha: 0.18)
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.square;
-
-    // Horizontal surface
-    canvas.drawLine(
-      Offset(cx - _deskW / 2, deskY),
-      Offset(cx + _deskW / 2, deskY),
-      paint,
-    );
-    // Left leg
-    canvas.drawLine(
-      Offset(cx - _deskW / 2, deskY),
-      Offset(cx - _deskW / 2, deskY + _deskEndH),
-      paint,
-    );
-    // Right leg
-    canvas.drawLine(
-      Offset(cx + _deskW / 2, deskY),
-      Offset(cx + _deskW / 2, deskY + _deskEndH),
-      paint,
-    );
-  }
-
   // ── Status label ──────────────────────────────────────────────────────────
 
   void _drawStatusLabel(Canvas canvas, double cx, double cy, Color sColor) {
@@ -578,8 +592,8 @@ class AgentPainter extends CustomPainter {
   // ── Activity speech bubble ────────────────────────────────────────────────
 
   void _drawActivityBubble(Canvas canvas, double cx, double cy, Color pColor) {
-    // Position bubble above the face
-    const bubbleBottomGap = _faceH / 2 + 12;
+    // Position bubble above the head
+    const bubbleBottomGap = _headRadius + 12;
 
     final rawText = agent.activity;
     const maxChars = 30;
