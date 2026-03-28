@@ -34,7 +34,7 @@ class AgentStatusNotifier extends StateNotifier<Map<String, AgentStatusInfo>> {
     _connectWebSocket();
     // Periodic refresh as fallback (every 5 seconds)
     _refreshTimer = Timer.periodic(
-      const Duration(seconds: 5),
+      const Duration(seconds: 3),
       (_) => refresh(),
     );
   }

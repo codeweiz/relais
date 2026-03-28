@@ -79,22 +79,38 @@ Offset slotPosition(int index, int total, Size size) {
 
 // ── Background painter ────────────────────────────────────────────────────────
 
-/// Paints the dark "Digital Workforce" office background with a subtle grid.
+/// Paints the "Digital Workforce" office background with a subtle grid.
+/// Accepts theme-aware colors so it works in both light and dark mode.
 class OfficePainter extends CustomPainter {
+  /// Background gradient start color (top-left).
+  final Color backgroundColor;
+
+  /// Background gradient end color (bottom-right).
+  final Color backgroundColorEnd;
+
+  /// Grid line color (should be very low opacity).
+  final Color gridColor;
+
+  const OfficePainter({
+    required this.backgroundColor,
+    required this.backgroundColorEnd,
+    required this.gridColor,
+  });
+
   @override
   void paint(Canvas canvas, Size size) {
-    // Deep gradient background
+    // Gradient background
     final bgPaint = Paint()
-      ..shader = const LinearGradient(
+      ..shader = LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFF0A0E1A), Color(0xFF151B2E)],
+        colors: [backgroundColor, backgroundColorEnd],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
     canvas.drawRect(Offset.zero & size, bgPaint);
 
     // Very faint grid lines
     final gridPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.03)
+      ..color = gridColor
       ..strokeWidth = 1;
     const spacing = 40.0;
     for (var x = 0.0; x < size.width; x += spacing) {
@@ -106,7 +122,10 @@ class OfficePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant OfficePainter old) =>
+      old.backgroundColor != backgroundColor ||
+      old.backgroundColorEnd != backgroundColorEnd ||
+      old.gridColor != gridColor;
 }
 
 // ── Agent painter ─────────────────────────────────────────────────────────────
@@ -125,11 +144,16 @@ class AgentPainter extends CustomPainter {
   /// Whether the activity bubble should show its full text or be truncated.
   final bool isBubbleExpanded;
 
+  /// Color for text labels (name badge, status label, bubble text).
+  /// Defaults to white for dark backgrounds, should be dark for light themes.
+  final Color labelColor;
+
   AgentPainter({
     required this.agent,
     required this.animationValue,
     required this.isBlinking,
     required this.isBubbleExpanded,
+    this.labelColor = Colors.white,
   });
 
   // Layout constants
@@ -238,13 +262,13 @@ class AgentPainter extends CustomPainter {
     const eyeR = 4.0;
 
     final eyePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.90)
+      ..color = labelColor.withValues(alpha: 0.90)
       ..style = PaintingStyle.fill;
 
     if (isBlinking) {
       // Closed eyes: thin horizontal lines
       final linePaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.80)
+        ..color = labelColor.withValues(alpha: 0.80)
         ..strokeWidth = 1.5
         ..strokeCap = StrokeCap.round;
       canvas.drawLine(
@@ -277,7 +301,7 @@ class AgentPainter extends CustomPainter {
     const mouthOffsetY = 8.0;
 
     final mouthPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.75)
+      ..color = labelColor.withValues(alpha: 0.75)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.8
       ..strokeCap = StrokeCap.round;
@@ -343,8 +367,8 @@ class AgentPainter extends CustomPainter {
     final tp = TextPainter(
       text: TextSpan(
         text: agent.name,
-        style: const TextStyle(
-          color: Colors.white,
+        style: TextStyle(
+          color: labelColor,
           fontSize: 10,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.4,
@@ -378,7 +402,7 @@ class AgentPainter extends CustomPainter {
   void _drawDesk(Canvas canvas, double cx, double cy) {
     final deskY = cy + _deskTopOffset;
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.18)
+      ..color = labelColor.withValues(alpha: 0.18)
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.square;
 
@@ -459,7 +483,7 @@ class AgentPainter extends CustomPainter {
       text: TextSpan(
         text: displayText,
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.92),
+          color: labelColor.withValues(alpha: 0.92),
           fontSize: 9.5,
           height: 1.3,
         ),
@@ -525,6 +549,7 @@ class AgentPainter extends CustomPainter {
         old.agent.name != agent.name ||
         old.animationValue != animationValue ||
         old.isBlinking != isBlinking ||
-        old.isBubbleExpanded != isBubbleExpanded;
+        old.isBubbleExpanded != isBubbleExpanded ||
+        old.labelColor != labelColor;
   }
 }

@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import '../models/agent_status.dart';
 import '../models/session.dart';
 import '../models/task.dart';
-import '../providers/agent_provider.dart';
 import '../providers/agent_status_provider.dart';
 import '../providers/server_provider.dart';
 import '../providers/session_provider.dart';
@@ -142,29 +141,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  // ── Quick message ────────────────────────────────────────────────────────────
-
-  void _showQuickMessage(AgentStatusInfo agent) {
-    final serverState = ref.read(serverProvider);
-    if (!serverState.isConnected) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => _QuickMessageDialog(
-        agentName: agent.name,
-        onSend: (text) {
-          final manager = ref.read(agentSessionManagerProvider);
-          final session = manager.getOrCreate(
-            sessionId: agent.sessionId,
-            baseUrl: serverState.server!.url,
-            token: serverState.server!.token,
-          );
-          session.sendMessage(text);
-        },
-      ),
-    );
-  }
-
   // ── Bubble expand/collapse ────────────────────────────────────────────────
 
   void _toggleBubble(String sessionId) {
@@ -205,13 +181,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       );
     }
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Theme-aware background colors
+    final bgStart = isDark
+        ? const Color(0xFF0A0E1A)
+        : const Color(0xFFF0F2F5);
+    final bgEnd = isDark
+        ? const Color(0xFF151B2E)
+        : const Color(0xFFE8EBF0);
+    final gridLineColor = isDark
+        ? Colors.white.withValues(alpha: 0.03)
+        : Colors.black.withValues(alpha: 0.04);
+    final agentLabelColor = isDark ? Colors.white : Colors.black87;
+
     return AnimatedBuilder(
       animation: _statusAnimController,
       builder: (context, _) {
         return LayoutBuilder(
           builder: (context, constraints) {
             return CustomPaint(
-              painter: OfficePainter(),
+              painter: OfficePainter(
+                backgroundColor: bgStart,
+                backgroundColorEnd: bgEnd,
+                gridColor: gridLineColor,
+              ),
               child: Stack(
                 children: List.generate(agentList.length, (index) {
                   final agent = agentList[index];
@@ -246,17 +241,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     height: slotSize.height,
                     child: Stack(
                       children: [
-                        // Main agent area — tap = navigate, long press = quick message
+                        // Main agent area — tap or long press = navigate to chat
                         GestureDetector(
                           onTap: () =>
                               context.push('/agent/${agent.sessionId}'),
-                          onLongPress: () => _showQuickMessage(agent),
+                          onLongPress: () =>
+                              context.push('/agent/${agent.sessionId}'),
                           child: CustomPaint(
                             painter: AgentPainter(
                               agent: displayAgent,
                               animationValue: _statusAnimController.value,
                               isBlinking: _blinking,
                               isBubbleExpanded: isExpanded,
+                              labelColor: agentLabelColor,
                             ),
                             size: slotSize,
                           ),
@@ -472,67 +469,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         onPressed: _showCreateDialog,
         child: const Icon(Icons.add),
       ),
-    );
-  }
-}
-
-// ── Quick message dialog ──────────────────────────────────────────────────────
-
-class _QuickMessageDialog extends StatefulWidget {
-  final String agentName;
-  final void Function(String text) onSend;
-
-  const _QuickMessageDialog({
-    required this.agentName,
-    required this.onSend,
-  });
-
-  @override
-  State<_QuickMessageDialog> createState() => _QuickMessageDialogState();
-}
-
-class _QuickMessageDialogState extends State<_QuickMessageDialog> {
-  final _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _send() {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    widget.onSend(text);
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('Send to ${widget.agentName}'),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        maxLines: 3,
-        minLines: 1,
-        decoration: const InputDecoration(
-          hintText: 'Type a message…',
-          border: OutlineInputBorder(),
-        ),
-        textInputAction: TextInputAction.send,
-        onSubmitted: (_) => _send(),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _send,
-          child: const Text('Send'),
-        ),
-      ],
     );
   }
 }

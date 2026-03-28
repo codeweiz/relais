@@ -98,6 +98,8 @@ impl AgentStatusRegistry {
     }
 
     /// Update activity. Returns true if the status actually changed (for throttling).
+    /// If `activity` is empty the existing activity text is preserved, so the
+    /// last meaningful message remains visible after TurnComplete.
     pub fn update(
         &self,
         session_id: &str,
@@ -106,9 +108,16 @@ impl AgentStatusRegistry {
         cost_usd: Option<f64>,
     ) -> bool {
         if let Some(mut entry) = self.entries.get_mut(session_id) {
-            let changed = entry.status != status || entry.activity != activity;
+            let effective_activity = if activity.is_empty() {
+                entry.activity.as_str()
+            } else {
+                activity
+            };
+            let changed = entry.status != status || entry.activity != effective_activity;
             entry.status = status;
-            entry.activity = activity.to_string();
+            if !activity.is_empty() {
+                entry.activity = activity.to_string();
+            }
             if let Some(cost) = cost_usd {
                 entry.cost_usd = Some(entry.cost_usd.unwrap_or(0.0) + cost);
             }

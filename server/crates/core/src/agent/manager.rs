@@ -336,8 +336,11 @@ impl AgentManager {
                         // Update status registry and broadcast activity change
                         let (activity_status, activity_text, event_cost) = match &event {
                             AgentEvent::Text(content) => {
-                                let summary: String = content.chars().take(50).collect();
-                                (AgentActivity::Working, summary, None)
+                                // Skip tiny streaming chunks to avoid noisy overwrites;
+                                // only surface substantial text (>= 10 chars).
+                                let summary: String = content.chars().take(100).collect();
+                                let text = if summary.len() >= 10 { summary } else { String::new() };
+                                (AgentActivity::Working, text, None)
                             }
                             AgentEvent::Thinking(_) => {
                                 (AgentActivity::Thinking, "Thinking...".to_string(), None)
