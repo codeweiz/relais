@@ -433,7 +433,13 @@ impl AgentManager {
                             }
                         }
 
-                        // Update status registry and broadcast activity change
+                        // Update status registry and broadcast activity change.
+                        // AvailableCommands is metadata — skip status update entirely
+                        // so it doesn't broadcast an empty-activity Working transition.
+                        if is_available_commands {
+                            continue;
+                        }
+
                         let (activity_status, activity_text, event_cost) = match &event {
                             AgentEvent::Text(content) => {
                                 let summary: String = content.chars().take(100).collect();
@@ -468,8 +474,14 @@ impl AgentManager {
                             AgentEvent::UserMessage { .. } => {
                                 (AgentActivity::Working, "Processing message...".to_string(), None)
                             }
-                            AgentEvent::AvailableCommands(_) | AgentEvent::Progress(_) => {
-                                (AgentActivity::Working, String::new(), None)
+                            AgentEvent::Progress(msg) => {
+                                let summary: String = msg.chars().take(100).collect();
+                                (AgentActivity::Working, summary, None)
+                            }
+                            AgentEvent::AvailableCommands(_) => {
+                                // Unreachable due to the continue above, but needed
+                                // for exhaustive match.
+                                continue;
                             }
                         };
 
@@ -480,6 +492,12 @@ impl AgentManager {
                             event_cost,
                         );
                         if changed {
+                            tracing::debug!(
+                                session_id = %sid,
+                                status = %activity_status,
+                                activity_len = activity_text.len(),
+                                "broadcasting activity change"
+                            );
                             event_bus_for_status.publish_control(
                                 ControlEvent::AgentActivityChanged {
                                     session_id: sid.clone(),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -63,9 +64,10 @@ class AgentStatusNotifier extends StateNotifier<Map<String, AgentStatusInfo>> {
 
           if (type == 'agent_activity') {
             final sessionId = json['session_id'] as String;
+            final incomingActivity = json['activity'] as String? ?? '';
+            debugPrint('[AgentStatus] $sessionId: status=${json['status']}, activity=${incomingActivity.length > 50 ? '${incomingActivity.substring(0, 50)}...' : incomingActivity}');
             final existing = state[sessionId];
             if (existing != null) {
-              final incomingActivity = json['activity'] as String? ?? '';
               final updated = AgentStatusInfo(
                 sessionId: sessionId,
                 name: existing.name,
