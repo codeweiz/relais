@@ -25,9 +25,10 @@ class TaskNotifier extends StateNotifier<List<TaskInfo>> {
   }
 
   Future<void> refresh() async {
-    if (_api == null) return;
+    final api = _api;
+    if (api == null) return;
     try {
-      final tasks = await _api!.getTasks();
+      final tasks = await api.getTasks();
       state = tasks;
     } catch (_) {}
   }
@@ -40,9 +41,10 @@ class TaskNotifier extends StateNotifier<List<TaskInfo>> {
     String? sourceSessionId,
     String? cwd,
   }) async {
-    if (_api == null) return null;
+    final api = _api;
+    if (api == null) return null;
     try {
-      final resp = await _api!.createTask(
+      final resp = await api.createTask(
         title: title,
         prompt: prompt,
         priority: priority,
@@ -58,9 +60,10 @@ class TaskNotifier extends StateNotifier<List<TaskInfo>> {
   }
 
   Future<void> cancelTask(String id) async {
-    if (_api == null) return;
+    final api = _api;
+    if (api == null) return;
     try {
-      await _api!.cancelTask(id);
+      await api.cancelTask(id);
       await refresh();
     } catch (_) {}
   }

@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../models/agent_status.dart';
 import '../providers/agent_status_provider.dart';
+import '../providers/task_provider.dart';
+import '../widgets/dispatch_dialog.dart';
 import '../widgets/office_painter.dart';
+import '../widgets/task_queue_panel.dart';
 import '../l10n/strings.dart';
 
 class OfficeScreen extends ConsumerStatefulWidget {
@@ -32,71 +36,119 @@ class _OfficeScreenState extends ConsumerState<OfficeScreen>
     super.dispose();
   }
 
+  void _showDispatchDialog(BuildContext context, WidgetRef ref) {
+    final agents = ref.read(agentStatusProvider);
+    showDialog(
+      context: context,
+      builder: (_) => DispatchDialog(
+        agents: agents.values.toList(),
+        onDispatch: (targetAgent, title, prompt, priority) {
+          ref.read(taskProvider.notifier).createTask(
+                title: title,
+                prompt: prompt.isEmpty ? title : prompt,
+                priority: priority,
+                targetAgent: targetAgent,
+              );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final agents = ref.watch(agentStatusProvider);
     final agentList = agents.values.toList();
+    final tasks = ref.watch(taskProvider);
 
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => context.go('/home')),
         title: Text(S.office),
       ),
-      body: agentList.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.groups_outlined,
-                      size: 64,
-                      color: Theme.of(context).colorScheme.outline),
-                  const SizedBox(height: 16),
-                  Text(S.noAgentsRunning,
-                      style: Theme.of(context).textTheme.titleMedium),
-                ],
-              ),
-            )
-          : AnimatedBuilder(
-              animation: _animController,
-              builder: (context, _) {
-                return LayoutBuilder(
-                  builder: (context, constraints) {
-                    return CustomPaint(
-                      painter: OfficePainter(),
-                      child: Stack(
-                        children: List.generate(agentList.length, (index) {
-                          final agent = agentList[index];
-                          final pos = slotPosition(
-                            index,
-                            agentList.length,
-                            Size(constraints.maxWidth, constraints.maxHeight),
-                          );
-                          const slotSize = Size(140, 160);
+      body: Column(
+        children: [
+          Expanded(
+            child: agentList.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.groups_outlined,
+                            size: 64,
+                            color: Theme.of(context).colorScheme.outline),
+                        const SizedBox(height: 16),
+                        Text(S.noAgentsRunning,
+                            style: Theme.of(context).textTheme.titleMedium),
+                      ],
+                    ),
+                  )
+                : AnimatedBuilder(
+                    animation: _animController,
+                    builder: (context, _) {
+                      return LayoutBuilder(
+                        builder: (context, constraints) {
+                          return CustomPaint(
+                            painter: OfficePainter(),
+                            child: Stack(
+                              children: List.generate(agentList.length, (index) {
+                                final agent = agentList[index];
+                                final pos = slotPosition(
+                                  index,
+                                  agentList.length,
+                                  Size(constraints.maxWidth,
+                                      constraints.maxHeight),
+                                );
+                                const slotSize = Size(140, 160);
 
-                          return Positioned(
-                            left: pos.dx - slotSize.width / 2,
-                            top: pos.dy - slotSize.height / 2,
-                            width: slotSize.width,
-                            height: slotSize.height,
-                            child: GestureDetector(
-                              onTap: () =>
-                                  context.push('/agent/${agent.sessionId}'),
-                              child: CustomPaint(
-                                painter: AgentPainter(
-                                  agent: agent,
-                                  animationValue: _animController.value,
-                                ),
-                                size: slotSize,
-                              ),
+                                // Enhance bubble with linked running task title
+                                final linkedTask = tasks
+                                    .where((t) =>
+                                        t.isRunning &&
+                                        t.sessionId == agent.sessionId)
+                                    .firstOrNull;
+                                final displayAgent = linkedTask != null
+                                    ? AgentStatusInfo(
+                                        sessionId: agent.sessionId,
+                                        name: agent.name,
+                                        provider: agent.provider,
+                                        status: agent.status,
+                                        activity:
+                                            '\u{1F4CB} ${linkedTask.name}',
+                                        costUsd: agent.costUsd,
+                                      )
+                                    : agent;
+
+                                return Positioned(
+                                  left: pos.dx - slotSize.width / 2,
+                                  top: pos.dy - slotSize.height / 2,
+                                  width: slotSize.width,
+                                  height: slotSize.height,
+                                  child: GestureDetector(
+                                    onTap: () => context
+                                        .push('/agent/${agent.sessionId}'),
+                                    child: CustomPaint(
+                                      painter: AgentPainter(
+                                        agent: displayAgent,
+                                        animationValue: _animController.value,
+                                      ),
+                                      size: slotSize,
+                                    ),
+                                  ),
+                                );
+                              }),
                             ),
                           );
-                        }),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                        },
+                      );
+                    },
+                  ),
+          ),
+          TaskQueuePanel(
+            tasks: tasks,
+            onNewTask: () => _showDispatchDialog(context, ref),
+          ),
+        ],
+      ),
     );
   }
 }
