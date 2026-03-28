@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../models/agent_status.dart';
 import '../models/session.dart';
 import '../models/task.dart';
+import '../providers/agent_provider.dart';
 import '../providers/agent_status_provider.dart';
 import '../providers/server_provider.dart';
 import '../providers/session_provider.dart';
@@ -22,27 +24,46 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _animController;
+    with TickerProviderStateMixin {
+  // Status glow / ring pulsing — continuous 2-second repeat.
+  late final AnimationController _statusAnimController;
 
-  // Bottom panel state
+  // Blink timer.
+  Timer? _blinkTimer;
+  bool _blinking = false;
+
+  // Per-agent bubble expand state.
+  final Set<String> _expandedBubbles = {};
+
+  // Bottom panel state.
   bool _panelExpanded = false;
   int _selectedTab = 0; // 0 = Sessions, 1 = Tasks
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
+
+    _statusAnimController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat();
+
+    // Trigger a 150 ms blink every ~3 seconds.
+    _blinkTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted) return;
+      setState(() => _blinking = true);
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) setState(() => _blinking = false);
+      });
+    });
 
     Future.microtask(() => ref.read(sessionProvider.notifier).refresh());
   }
 
   @override
   void dispose() {
-    _animController.dispose();
+    _statusAnimController.dispose();
+    _blinkTimer?.cancel();
     super.dispose();
   }
 
@@ -121,7 +142,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  // ── Workspace canvas ────────────────────────────────────────────────────────
+  // ── Quick message ────────────────────────────────────────────────────────────
+
+  void _showQuickMessage(AgentStatusInfo agent) {
+    final serverState = ref.read(serverProvider);
+    if (!serverState.isConnected) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => _QuickMessageDialog(
+        agentName: agent.name,
+        onSend: (text) {
+          final manager = ref.read(agentSessionManagerProvider);
+          final session = manager.getOrCreate(
+            sessionId: agent.sessionId,
+            baseUrl: serverState.server!.url,
+            token: serverState.server!.token,
+          );
+          session.sendMessage(text);
+        },
+      ),
+    );
+  }
+
+  // ── Bubble expand/collapse ────────────────────────────────────────────────
+
+  void _toggleBubble(String sessionId) {
+    setState(() {
+      if (_expandedBubbles.contains(sessionId)) {
+        _expandedBubbles.remove(sessionId);
+      } else {
+        _expandedBubbles.add(sessionId);
+      }
+    });
+  }
+
+  // ── Workspace canvas ─────────────────────────────────────────────────────
 
   Widget _buildWorkspace(
     BuildContext context,
@@ -150,7 +206,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
 
     return AnimatedBuilder(
-      animation: _animController,
+      animation: _statusAnimController,
       builder: (context, _) {
         return LayoutBuilder(
           builder: (context, constraints) {
@@ -164,7 +220,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     agentList.length,
                     Size(constraints.maxWidth, constraints.maxHeight),
                   );
-                  const slotSize = Size(140, 160);
+                  const slotSize = Size(160, 200);
 
                   final linkedTask = tasks
                       .where((t) =>
@@ -181,21 +237,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         )
                       : agent;
 
+                  final isExpanded = _expandedBubbles.contains(agent.sessionId);
+
                   return Positioned(
                     left: pos.dx - slotSize.width / 2,
                     top: pos.dy - slotSize.height / 2,
                     width: slotSize.width,
                     height: slotSize.height,
-                    child: GestureDetector(
-                      onTap: () =>
-                          context.push('/agent/${agent.sessionId}'),
-                      child: CustomPaint(
-                        painter: AgentPainter(
-                          agent: displayAgent,
-                          animationValue: _animController.value,
+                    child: Stack(
+                      children: [
+                        // Main agent area — tap = navigate, long press = quick message
+                        GestureDetector(
+                          onTap: () =>
+                              context.push('/agent/${agent.sessionId}'),
+                          onLongPress: () => _showQuickMessage(agent),
+                          child: CustomPaint(
+                            painter: AgentPainter(
+                              agent: displayAgent,
+                              animationValue: _statusAnimController.value,
+                              isBlinking: _blinking,
+                              isBubbleExpanded: isExpanded,
+                            ),
+                            size: slotSize,
+                          ),
                         ),
-                        size: slotSize,
-                      ),
+                        // Bubble tap target (top portion of slot) — toggles expand
+                        if (agent.activity.isNotEmpty)
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: slotSize.height * 0.38,
+                            child: GestureDetector(
+                              onTap: () => _toggleBubble(agent.sessionId),
+                              behavior: HitTestBehavior.translucent,
+                            ),
+                          ),
+                      ],
                     ),
                   );
                 }),
@@ -207,7 +285,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
-  // ── Bottom panel ────────────────────────────────────────────────────────────
+  // ── Bottom panel ─────────────────────────────────────────────────────────
 
   Widget _buildBottomPanel(
     BuildContext context,
@@ -225,7 +303,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
-      // Collapsed: ~56dp (tab bar only). Expanded: up to 40% of screen height.
       constraints: BoxConstraints(
         maxHeight: _panelExpanded
             ? MediaQuery.of(context).size.height * 0.40
@@ -240,7 +317,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Tab bar / header row
           InkWell(
             onTap: () => setState(() => _panelExpanded = !_panelExpanded),
             child: SizedBox(
@@ -248,7 +324,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               child: Row(
                 children: [
                   const SizedBox(width: 8),
-                  // Sessions tab
                   _PanelTab(
                     label: S.sessions,
                     count: sessions.length,
@@ -259,7 +334,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     }),
                   ),
                   const SizedBox(width: 4),
-                  // Tasks tab
                   _PanelTab(
                     label: S.tasks,
                     count: activeTasks.length,
@@ -280,7 +354,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ),
             ),
           ),
-          // Panel content (only visible when expanded)
           if (_panelExpanded)
             Flexible(
               child: _selectedTab == 0
@@ -389,11 +462,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ),
       body: Column(
         children: [
-          // Primary workspace canvas
           Expanded(
             child: _buildWorkspace(context, agentList, tasks),
           ),
-          // Collapsible bottom panel
           _buildBottomPanel(context, sessions, tasks),
         ],
       ),
@@ -401,6 +472,67 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         onPressed: _showCreateDialog,
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+// ── Quick message dialog ──────────────────────────────────────────────────────
+
+class _QuickMessageDialog extends StatefulWidget {
+  final String agentName;
+  final void Function(String text) onSend;
+
+  const _QuickMessageDialog({
+    required this.agentName,
+    required this.onSend,
+  });
+
+  @override
+  State<_QuickMessageDialog> createState() => _QuickMessageDialogState();
+}
+
+class _QuickMessageDialogState extends State<_QuickMessageDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _send() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    widget.onSend(text);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Send to ${widget.agentName}'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLines: 3,
+        minLines: 1,
+        decoration: const InputDecoration(
+          hintText: 'Type a message…',
+          border: OutlineInputBorder(),
+        ),
+        textInputAction: TextInputAction.send,
+        onSubmitted: (_) => _send(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _send,
+          child: const Text('Send'),
+        ),
+      ],
     );
   }
 }

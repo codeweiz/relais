@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,6 +22,9 @@ class _OfficeScreenState extends ConsumerState<OfficeScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _animController;
 
+  Timer? _blinkTimer;
+  bool _blinking = false;
+
   @override
   void initState() {
     super.initState();
@@ -28,11 +32,20 @@ class _OfficeScreenState extends ConsumerState<OfficeScreen>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat();
+
+    _blinkTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted) return;
+      setState(() => _blinking = true);
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) setState(() => _blinking = false);
+      });
+    });
   }
 
   @override
   void dispose() {
     _animController.dispose();
+    _blinkTimer?.cancel();
     super.dispose();
   }
 
@@ -98,7 +111,7 @@ class _OfficeScreenState extends ConsumerState<OfficeScreen>
                                   Size(constraints.maxWidth,
                                       constraints.maxHeight),
                                 );
-                                const slotSize = Size(140, 160);
+                                const slotSize = Size(160, 200);
 
                                 // Enhance bubble with linked running task title
                                 final linkedTask = tasks
@@ -130,6 +143,8 @@ class _OfficeScreenState extends ConsumerState<OfficeScreen>
                                       painter: AgentPainter(
                                         agent: displayAgent,
                                         animationValue: _animController.value,
+                                        isBlinking: _blinking,
+                                        isBubbleExpanded: false,
                                       ),
                                       size: slotSize,
                                     ),
