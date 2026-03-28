@@ -156,8 +156,11 @@ impl ClaudeAcpBridge {
                 match sdk.recv_event().await {
                     Some(SdkEvent::SystemInit { slash_commands, .. }) => {
                         if !slash_commands.is_empty() {
-                            // Got the real command list — emit and stop draining.
-                            let commands: Vec<acp::AvailableCommand> = slash_commands
+                            // Got the real command list — prepend built-in CLI commands
+                            // (e.g. /help, /clear) that are not included in the commands
+                            // array from the control_response initialize reply.
+                            let merged = merge_with_builtins(&slash_commands);
+                            let commands: Vec<acp::AvailableCommand> = merged
                                 .iter()
                                 .map(|(name, desc)| {
                                     acp::AvailableCommand::new(name.clone(), desc.as_str())
@@ -245,7 +248,8 @@ impl ClaudeAcpBridge {
                     slash_commands, ..
                 } => {
                     if !slash_commands.is_empty() {
-                        let commands: Vec<acp::AvailableCommand> = slash_commands
+                        let merged = merge_with_builtins(&slash_commands);
+                        let commands: Vec<acp::AvailableCommand> = merged
                             .iter()
                             .map(|(name, desc)| {
                                 acp::AvailableCommand::new(name.clone(), desc.as_str())
@@ -367,6 +371,56 @@ impl acp::Agent for ClaudeAcpBridge {
     async fn ext_notification(&self, _args: acp::ExtNotification) -> acp::Result<()> {
         Ok(())
     }
+}
+
+// ---------------------------------------------------------------------------
+// Built-in command helpers
+// ---------------------------------------------------------------------------
+
+/// Known built-in Claude Code CLI slash commands that are not returned in the
+/// `commands` array of the `control_response` initialize reply (they are
+/// hard-coded into the CLI rather than registered as skills).
+fn builtin_slash_commands() -> Vec<(String, String)> {
+    vec![
+        ("help".into(), "Show help".into()),
+        ("clear".into(), "Clear conversation".into()),
+        ("compact".into(), "Compact conversation".into()),
+        ("model".into(), "Change model".into()),
+        ("cost".into(), "Show token costs".into()),
+        ("fast".into(), "Toggle fast mode".into()),
+        ("effort".into(), "Set effort level".into()),
+        ("status".into(), "Show session status".into()),
+        ("login".into(), "Login".into()),
+        ("logout".into(), "Logout".into()),
+        ("doctor".into(), "Health check".into()),
+        ("review".into(), "Review code".into()),
+        ("init".into(), "Initialize project".into()),
+        ("bug".into(), "Report a bug".into()),
+        ("listen".into(), "Listen mode".into()),
+        ("terminal".into(), "Open terminal".into()),
+        ("vim".into(), "Vim mode".into()),
+        ("permissions".into(), "Manage permissions".into()),
+        ("memory".into(), "Memory management".into()),
+        ("mcp".into(), "MCP server management".into()),
+        ("add-dir".into(), "Add directory".into()),
+    ]
+}
+
+/// Merge built-in commands with skill-based commands from the init response.
+///
+/// Built-ins come first; skill commands are appended if their name doesn't
+/// clash with a built-in.
+fn merge_with_builtins(skill_commands: &[(String, String)]) -> Vec<(String, String)> {
+    let builtins = builtin_slash_commands();
+    let builtin_names: std::collections::HashSet<String> =
+        builtins.iter().map(|(n, _)| n.clone()).collect();
+    let mut merged = builtins;
+    for (name, desc) in skill_commands {
+        if !builtin_names.contains(name) {
+            merged.push((name.clone(), desc.clone()));
+        }
+    }
+    merged
 }
 
 // ---------------------------------------------------------------------------
