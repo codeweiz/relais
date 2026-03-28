@@ -220,6 +220,22 @@ fn control_event_to_json(event: &ControlEvent) -> Option<String> {
                 "activity": activity,
             })
         }
+        ControlEvent::TaskCompleted {
+            task_id,
+            source_session_id,
+            target_name,
+            success,
+            summary,
+        } => {
+            serde_json::json!({
+                "type": "task_completed",
+                "task_id": task_id,
+                "source_session_id": source_session_id,
+                "target_name": target_name,
+                "success": success,
+                "summary": summary,
+            })
+        }
     };
 
     Some(json.to_string())

@@ -68,6 +68,13 @@ pub enum ControlEvent {
         status: String,
         activity: String,
     },
+    TaskCompleted {
+        task_id: String,
+        source_session_id: String,
+        target_name: String,
+        success: bool,
+        summary: String,
+    },
 }
 
 /// Data events sent through per-session mpsc channels.

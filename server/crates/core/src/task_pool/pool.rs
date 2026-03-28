@@ -303,10 +303,12 @@ impl TaskPool {
             .map(|t| t.id.clone())
             .collect();
 
-        // Find all executable tasks
+        // Find all executable tasks — only auto-dispatch tasks that have been
+        // assigned a target_agent (i.e. @ dispatched). Unassigned tasks remain
+        // queued until manually started or assigned.
         let mut candidates: Vec<&Task> = tasks
             .iter()
-            .filter(|t| t.is_executable(&completed_ids))
+            .filter(|t| t.is_executable(&completed_ids) && t.target_agent.is_some())
             .collect();
 
         // Sort by priority (P0 first), then by creation time (FIFO)

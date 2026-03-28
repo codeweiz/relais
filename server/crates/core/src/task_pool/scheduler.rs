@@ -134,7 +134,7 @@ impl TaskDispatcher {
                     result = control_rx.recv() => {
                         match result {
                             Ok(event) => {
-                                Self::handle_control_event(&config, &pool, &event).await;
+                                Self::handle_control_event(&config, &pool, &event_bus, &event).await;
                             }
                             Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
                                 warn!(skipped = n, "dispatcher lagged on control events");
@@ -317,7 +317,12 @@ impl TaskDispatcher {
 
     /// Handle a control event — look for agent status changes that indicate
     /// a task's agent turn has completed (or crashed).
-    async fn handle_control_event(config: &SchedulerConfig, pool: &TaskPool, event: &ControlEvent) {
+    async fn handle_control_event(
+        config: &SchedulerConfig,
+        pool: &TaskPool,
+        event_bus: &EventBus,
+        event: &ControlEvent,
+    ) {
         if let ControlEvent::AgentStatusChanged { session_id, status } = event {
             // Only care about task-dispatched sessions (prefixed "task-").
             if !session_id.starts_with("task-") {
@@ -327,11 +332,11 @@ impl TaskDispatcher {
             match status {
                 AgentStatus::Idle => {
                     // Agent finished its turn. Transition task based on auto_approve.
-                    Self::handle_agent_idle(config, pool, session_id).await;
+                    Self::handle_agent_idle(config, pool, event_bus, session_id).await;
                 }
                 AgentStatus::Crashed { error, .. } => {
                     // Agent crashed — fail the task.
-                    Self::handle_agent_crash(pool, session_id, error).await;
+                    Self::handle_agent_crash(pool, event_bus, session_id, error).await;
                 }
                 _ => {}
             }
@@ -339,7 +344,12 @@ impl TaskDispatcher {
     }
 
     /// Agent went idle — the turn completed. Transition the task.
-    async fn handle_agent_idle(config: &SchedulerConfig, pool: &TaskPool, session_id: &str) {
+    async fn handle_agent_idle(
+        config: &SchedulerConfig,
+        pool: &TaskPool,
+        event_bus: &EventBus,
+        session_id: &str,
+    ) {
         if let Some(task) = pool.find_by_session_id(session_id).await {
             if task.status != TaskStatus::Running {
                 return;
@@ -383,11 +393,29 @@ impl TaskDispatcher {
                     )
                     .await;
             }
+
+            // Broadcast TaskCompleted so the source session gets notified.
+            if let Some(source_sid) = &task.source_session_id {
+                let summary = task
+                    .result
+                    .as_ref()
+                    .and_then(|r| r.output.clone())
+                    .unwrap_or_default();
+                let summary: String = summary.chars().take(200).collect();
+
+                event_bus.publish_control(ControlEvent::TaskCompleted {
+                    task_id: task.id.clone(),
+                    source_session_id: source_sid.clone(),
+                    target_name: task.target_agent.clone().unwrap_or_default(),
+                    success: new_status == TaskStatus::Completed,
+                    summary,
+                });
+            }
         }
     }
 
     /// Agent crashed — fail the associated task.
-    async fn handle_agent_crash(pool: &TaskPool, session_id: &str, error: &str) {
+    async fn handle_agent_crash(pool: &TaskPool, event_bus: &EventBus, session_id: &str, error: &str) {
         if let Some(task) = pool.find_by_session_id(session_id).await {
             if task.status != TaskStatus::Running {
                 return;
@@ -418,6 +446,20 @@ impl TaskDispatcher {
                     },
                 )
                 .await;
+
+            // Broadcast TaskCompleted (as failure) so the source session is notified.
+            if let Some(source_sid) = &task.source_session_id {
+                event_bus.publish_control(ControlEvent::TaskCompleted {
+                    task_id: task.id.clone(),
+                    source_session_id: source_sid.clone(),
+                    target_name: task.target_agent.clone().unwrap_or_default(),
+                    success: false,
+                    summary: format!("Agent crashed: {}", error)
+                        .chars()
+                        .take(200)
+                        .collect(),
+                });
+            }
         }
     }
 
