@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show max;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -282,78 +283,115 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       builder: (context, _) {
         return LayoutBuilder(
           builder: (context, constraints) {
-            return CustomPaint(
-              painter: OfficePainter(
-                backgroundColor: bgStart,
-                backgroundColorEnd: bgEnd,
-                gridColor: gridLineColor,
-              ),
-              child: Stack(
-                children: List.generate(agentList.length, (index) {
-                  final agent = agentList[index];
-                  final pos = slotPosition(
-                    index,
-                    agentList.length,
-                    Size(constraints.maxWidth, constraints.maxHeight),
-                  );
-                  const slotSize = Size(160, 200);
+            final layouts = computeGroupedLayout(
+                agentList, constraints.maxWidth);
+            final totalHeight =
+                computeGroupedContentHeight(layouts);
+            final contentW = max(constraints.maxWidth, 400.0);
+            final contentH =
+                max(constraints.maxHeight, totalHeight);
 
-                  final linkedTask = tasks
-                      .where((t) =>
-                          t.isRunning && t.sessionId == agent.sessionId)
-                      .firstOrNull;
-                  final displayAgent = linkedTask != null
-                      ? AgentStatusInfo(
-                          sessionId: agent.sessionId,
-                          name: agent.name,
-                          provider: agent.provider,
-                          status: agent.status,
-                          activity: '\u{1F4CB} ${linkedTask.name}',
-                          costUsd: agent.costUsd,
-                        )
-                      : agent;
+            // Build flat list of (agent, position) from grouped layouts
+            final agentPositions =
+                <(AgentStatusInfo, Offset)>[];
+            for (final group in layouts) {
+              final groupAgents = agentList
+                  .where((a) => a.provider == group.provider)
+                  .toList();
+              for (var i = 0;
+                  i < groupAgents.length &&
+                      i < group.positions.length;
+                  i++) {
+                agentPositions
+                    .add((groupAgents[i], group.positions[i]));
+              }
+            }
 
-                  final isExpanded = _expandedBubbles.contains(agent.sessionId);
+            return InteractiveViewer(
+              boundaryMargin: const EdgeInsets.all(100),
+              minScale: 0.4,
+              maxScale: 2.0,
+              constrained: false,
+              child: SizedBox(
+                width: contentW,
+                height: contentH,
+                child: CustomPaint(
+                  painter: OfficePainter(
+                    backgroundColor: bgStart,
+                    backgroundColorEnd: bgEnd,
+                    gridColor: gridLineColor,
+                    groups: layouts,
+                  ),
+                  child: Stack(
+                    children: agentPositions.map((pair) {
+                      final (agent, pos) = pair;
+                      const slotSize = Size(140, 150);
 
-                  return Positioned(
-                    left: pos.dx - slotSize.width / 2,
-                    top: pos.dy - slotSize.height / 2,
-                    width: slotSize.width,
-                    height: slotSize.height,
-                    child: Stack(
-                      children: [
-                        // Main agent area — tap = navigate to chat, long press = quick message
-                        GestureDetector(
-                          onTap: () =>
-                              context.push('/agent/${agent.sessionId}'),
-                          onLongPress: () => _showQuickMessage(agent),
-                          child: CustomPaint(
-                            painter: AgentPainter(
-                              agent: displayAgent,
-                              animationValue: _statusAnimController.value,
-                              isBlinking: _blinking,
-                              isBubbleExpanded: isExpanded,
-                              labelColor: agentLabelColor,
+                      final linkedTask = tasks
+                          .where((t) =>
+                              t.isRunning &&
+                              t.sessionId == agent.sessionId)
+                          .firstOrNull;
+                      final displayAgent = linkedTask != null
+                          ? AgentStatusInfo(
+                              sessionId: agent.sessionId,
+                              name: agent.name,
+                              provider: agent.provider,
+                              status: agent.status,
+                              activity:
+                                  '\u{1F4CB} ${linkedTask.name}',
+                              costUsd: agent.costUsd,
+                            )
+                          : agent;
+
+                      final isExpanded =
+                          _expandedBubbles.contains(agent.sessionId);
+
+                      return Positioned(
+                        left: pos.dx - slotSize.width / 2,
+                        top: pos.dy - slotSize.height / 2,
+                        width: slotSize.width,
+                        height: slotSize.height,
+                        child: Stack(
+                          children: [
+                            // Main agent area — tap = navigate to chat, long press = quick message
+                            GestureDetector(
+                              onTap: () => context
+                                  .push('/agent/${agent.sessionId}'),
+                              onLongPress: () =>
+                                  _showQuickMessage(agent),
+                              child: CustomPaint(
+                                painter: AgentPainter(
+                                  agent: displayAgent,
+                                  animationValue:
+                                      _statusAnimController.value,
+                                  isBlinking: _blinking,
+                                  isBubbleExpanded: isExpanded,
+                                  labelColor: agentLabelColor,
+                                ),
+                                size: slotSize,
+                              ),
                             ),
-                            size: slotSize,
-                          ),
+                            // Bubble tap target (top portion of slot) — toggles expand
+                            if (agent.activity.isNotEmpty)
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                height: slotSize.height * 0.38,
+                                child: GestureDetector(
+                                  onTap: () => _toggleBubble(
+                                      agent.sessionId),
+                                  behavior:
+                                      HitTestBehavior.translucent,
+                                ),
+                              ),
+                          ],
                         ),
-                        // Bubble tap target (top portion of slot) — toggles expand
-                        if (agent.activity.isNotEmpty)
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: slotSize.height * 0.38,
-                            child: GestureDetector(
-                              onTap: () => _toggleBubble(agent.sessionId),
-                              behavior: HitTestBehavior.translucent,
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                }),
+                      );
+                    }).toList(),
+                  ),
+                ),
               ),
             );
           },

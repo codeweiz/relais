@@ -2,6 +2,93 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/agent_status.dart';
 
+// ── Grouped layout ───────────────────────────────────────────────────────────
+
+/// Layout result for a group of agents.
+class GroupLayout {
+  final String provider;
+  final String displayName;
+  final double yOffset;
+  final double height;
+  final List<Offset> positions;
+
+  const GroupLayout({
+    required this.provider,
+    required this.displayName,
+    required this.yOffset,
+    required this.height,
+    required this.positions,
+  });
+}
+
+/// Compute grouped layout for all agents.
+List<GroupLayout> computeGroupedLayout(
+    List<AgentStatusInfo> agents, double canvasWidth) {
+  const slotW = 140.0;
+  const slotH = 150.0;
+  const headerH = 32.0;
+  const groupPadding = 16.0;
+
+  final grouped = <String, List<AgentStatusInfo>>{};
+  for (final a in agents) {
+    grouped.putIfAbsent(a.provider, () => []).add(a);
+  }
+
+  final layouts = <GroupLayout>[];
+  double currentY = groupPadding;
+
+  for (final entry in grouped.entries) {
+    final count = entry.value.length;
+    final cols = (canvasWidth / slotW).floor().clamp(1, count);
+    final rows = (count / cols).ceil();
+    final groupHeight = headerH + rows * slotH;
+
+    final positions = <Offset>[];
+    for (var i = 0; i < count; i++) {
+      final row = i ~/ cols;
+      final col = i % cols;
+      positions.add(Offset(
+        col * slotW + slotW / 2,
+        currentY + headerH + row * slotH + slotH / 2,
+      ));
+    }
+
+    layouts.add(GroupLayout(
+      provider: entry.key,
+      displayName: _providerDisplayName(entry.key),
+      yOffset: currentY,
+      height: groupHeight,
+      positions: positions,
+    ));
+
+    currentY += groupHeight + groupPadding;
+  }
+  return layouts;
+}
+
+/// Total content height from grouped layout.
+double computeGroupedContentHeight(List<GroupLayout> layouts) {
+  if (layouts.isEmpty) return 0;
+  final last = layouts.last;
+  return last.yOffset + last.height + 16;
+}
+
+String _providerDisplayName(String id) {
+  switch (id) {
+    case 'claude-code':
+      return 'Claude Code';
+    case 'codex':
+      return 'Codex CLI';
+    case 'gemini':
+    case 'gemini-cli':
+      return 'Gemini CLI';
+    case 'opencode':
+      return 'OpenCode';
+    default:
+      return id;
+  }
+}
+
 // ── Provider helpers ──────────────────────────────────────────────────────────
 
 /// Colors for each provider.
@@ -91,10 +178,14 @@ class OfficePainter extends CustomPainter {
   /// Grid line color (should be very low opacity).
   final Color gridColor;
 
+  /// Grouped layout sections to draw headers for.
+  final List<GroupLayout> groups;
+
   const OfficePainter({
     required this.backgroundColor,
     required this.backgroundColorEnd,
     required this.gridColor,
+    this.groups = const [],
   });
 
   @override
@@ -119,13 +210,30 @@ class OfficePainter extends CustomPainter {
     for (var y = 0.0; y < size.height; y += spacing) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
     }
+
+    // Draw group headers
+    for (final group in groups) {
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: group.displayName,
+          style: TextStyle(
+            color: gridColor.withValues(alpha: 0.5),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      textPainter.paint(canvas, Offset(12, group.yOffset + 8));
+    }
   }
 
   @override
   bool shouldRepaint(covariant OfficePainter old) =>
       old.backgroundColor != backgroundColor ||
       old.backgroundColorEnd != backgroundColorEnd ||
-      old.gridColor != gridColor;
+      old.gridColor != gridColor ||
+      old.groups.length != groups.length;
 }
 
 // ── Agent painter ─────────────────────────────────────────────────────────────
