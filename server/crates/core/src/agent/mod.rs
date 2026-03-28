@@ -11,3 +11,4 @@ pub mod error_classify;
 pub mod event;
 pub mod manager;
 pub mod native_acp;
+pub mod status_registry;
