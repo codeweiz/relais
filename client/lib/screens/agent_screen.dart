@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import '../models/agent_message.dart';
+import '../models/agent_status.dart';
 import '../models/session.dart';
 import '../models/slash_command.dart';
+import '../providers/agent_status_provider.dart';
 import '../providers/server_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/agent_provider.dart';
+import '../providers/task_provider.dart';
 import '../widgets/agent_chat.dart';
+import '../widgets/agent_picker_menu.dart';
+import '../widgets/dispatch_dialog.dart';
 import '../widgets/session_switcher.dart';
 import '../widgets/slash_command_menu.dart';
 import '../l10n/strings.dart';
@@ -30,6 +36,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
   final _layerLink = LayerLink();
   final _menuController = SlashCommandMenuController();
   bool _showingMenu = false;
+  final _agentPickerController = AgentPickerController();
+  bool _showingAgentPicker = false;
 
   @override
   void initState() {
@@ -98,6 +106,29 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     } else {
       _dismissMenu();
     }
+
+    // @ agent picker
+    if (text.startsWith('@') && !text.contains(' ')) {
+      final agents = ref.read(agentStatusProvider);
+      final agentList = agents.values
+          .where((a) => a.sessionId != widget.sessionId)
+          .toList();
+      if (agentList.isNotEmpty) {
+        if (!_showingAgentPicker) {
+          _showingAgentPicker = true;
+          _agentPickerController.show(
+            context: context,
+            layerLink: _layerLink,
+            agents: agentList,
+            onSelect: _onAgentSelected,
+            onDismiss: () => _showingAgentPicker = false,
+          );
+        }
+      }
+    } else if (_showingAgentPicker) {
+      _agentPickerController.dismiss();
+      _showingAgentPicker = false;
+    }
   }
 
   void _onCommandSelected(SlashCommand cmd) {
@@ -121,10 +152,97 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     }
   }
 
+  void _onAgentSelected(AgentStatusInfo agent) {
+    _inputController.text = '@${agent.name} ';
+    _inputController.selection = TextSelection.collapsed(
+      offset: _inputController.text.length,
+    );
+    _showingAgentPicker = false;
+    _inputFocusNode.requestFocus();
+  }
+
+  Future<void> _dispatchTask(String text) async {
+    // Parse @name description
+    final spaceIndex = text.indexOf(' ');
+    if (spaceIndex < 0) return;
+    final targetName = text.substring(1, spaceIndex);
+    final description = text.substring(spaceIndex + 1).trim();
+    if (description.isEmpty) return;
+
+    // Validate agent exists
+    final agents = ref.read(agentStatusProvider);
+    final targetExists = agents.values.any((a) => a.name == targetName);
+    if (!targetExists) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.agentNotFound)),
+        );
+      }
+      return;
+    }
+
+    // Create task
+    final taskNotifier = ref.read(taskProvider.notifier);
+    await taskNotifier.createTask(
+      title: description.length > 50
+          ? '${description.substring(0, 50)}...'
+          : description,
+      prompt: description,
+      targetAgent: targetName,
+      sourceSessionId: widget.sessionId,
+    );
+
+    // Insert local system message
+    _session!.messages.add(AgentMessage(
+      id: 'dispatch-${DateTime.now().millisecondsSinceEpoch}',
+      type: AgentMessageType.progress,
+      content: S.dispatched(targetName, description),
+      timestamp: DateTime.now(),
+    ));
+    if (mounted) setState(() {});
+  }
+
+  void _showDispatchDialog() {
+    final agents = ref.read(agentStatusProvider);
+    final agentList = agents.values
+        .where((a) => a.sessionId != widget.sessionId)
+        .toList();
+    showDialog(
+      context: context,
+      builder: (_) => DispatchDialog(
+        agents: agentList,
+        onDispatch: (targetAgent, title, prompt, priority) async {
+          final taskNotifier = ref.read(taskProvider.notifier);
+          await taskNotifier.createTask(
+            title: title,
+            prompt: prompt.isEmpty ? title : prompt,
+            priority: priority,
+            targetAgent: targetAgent,
+            sourceSessionId: widget.sessionId,
+          );
+          _session!.messages.add(AgentMessage(
+            id: 'dispatch-${DateTime.now().millisecondsSinceEpoch}',
+            type: AgentMessageType.progress,
+            content: S.dispatched(targetAgent, title),
+            timestamp: DateTime.now(),
+          ));
+          if (mounted) setState(() {});
+        },
+      ),
+    );
+  }
+
   void _sendMessage() {
     _dismissMenu();
     final text = _inputController.text.trim();
     if (text.isEmpty || _session == null) return;
+
+    // @ dispatch — don't send to current agent
+    if (text.startsWith('@') && text.contains(' ')) {
+      _dispatchTask(text);
+      _inputController.value = TextEditingValue.empty;
+      return;
+    }
 
     // Cancel voice if active — cancel() doesn't fire a final result callback
     if (_isListening) {
@@ -174,6 +292,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     _scrollController.dispose();
     _inputFocusNode.dispose();
     _menuController.dismiss();
+    _agentPickerController.dismiss();
     super.dispose();
   }
 
@@ -238,6 +357,15 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
             child: SafeArea(
               child: Row(
                 children: [
+                  IconButton(
+                    onPressed: _showDispatchDialog,
+                    icon: const Text('@',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        )),
+                    tooltip: S.dispatchTo,
+                  ),
                   Expanded(
                     child: CompositedTransformTarget(
                       link: _layerLink,
