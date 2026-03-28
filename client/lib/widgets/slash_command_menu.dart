@@ -161,48 +161,45 @@ class _DesktopOverlay extends StatelessWidget {
                       style: theme.textTheme.bodySmall
                           ?.copyWith(color: theme.colorScheme.outline)),
                 )
-              : Scrollbar(
-                  thumbVisibility: true,
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: commands.length,
-                    itemBuilder: (context, index) {
-                      final cmd = commands[index];
-                      final isSelected = index == selectedIndex;
-                      return InkWell(
-                        onTap: () => onSelect(cmd),
-                        child: Container(
-                          color: isSelected
-                              ? theme.colorScheme.primary.withValues(alpha: 0.12)
-                              : null,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          child: Row(
-                            children: [
-                              Text(
-                                '/${cmd.name}',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: theme.colorScheme.primary,
-                                ),
+              : ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: commands.length,
+                  itemBuilder: (context, index) {
+                    final cmd = commands[index];
+                    final isSelected = index == selectedIndex;
+                    return InkWell(
+                      onTap: () => onSelect(cmd),
+                      child: Container(
+                        color: isSelected
+                            ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                            : null,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        child: Row(
+                          children: [
+                            Text(
+                              '/${cmd.name}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.primary,
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  cmd.description,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: theme.colorScheme.outline,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                cmd.description,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.outline,
                                 ),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  },
                 ),
         ),
       ),
