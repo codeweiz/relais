@@ -56,10 +56,64 @@ pub async fn ws_agent(
         return (axum::http::StatusCode::UNAUTHORIZED, "Invalid token").into_response();
     }
 
-    // 2. Lookup session in AgentManager
+    // 2. Lookup session in AgentManager — if not found, try to resume a
+    //    suspended session from disk.
     let session_id = params.session.clone();
     if !state.core.agent_manager.has_agent(&session_id) {
-        return (axum::http::StatusCode::NOT_FOUND, "Agent session not found").into_response();
+        // Check if this is a suspended session that can be resumed
+        let can_resume = state
+            .core
+            .session_store
+            .get_meta(&session_id)
+            .ok()
+            .map(|meta| {
+                matches!(
+                    meta.session_type,
+                    relais_core::session::types::SessionType::Agent
+                ) && meta.status == relais_core::session::types::SessionStatus::Suspended
+            })
+            .unwrap_or(false);
+
+        if can_resume {
+            if let Ok(meta) = state.core.session_store.get_meta(&session_id) {
+                let provider = meta
+                    .agent
+                    .as_ref()
+                    .map(|a| a.provider.as_str())
+                    .unwrap_or("claude-code");
+                let model = meta
+                    .agent
+                    .as_ref()
+                    .map(|a| a.model.as_str())
+                    .unwrap_or("");
+                let cwd = std::path::PathBuf::from(&meta.cwd);
+                let resume_id = meta.acp_session_id.as_deref();
+
+                info!(session_id = %session_id, name = %meta.name, resume = resume_id.is_some(), "resuming suspended agent session");
+                if let Err(e) = state
+                    .core
+                    .agent_manager
+                    .create_agent_with_resume(session_id.clone(), &meta.name, provider, model, cwd, resume_id)
+                    .await
+                {
+                    warn!(session_id = %session_id, error = %e, "failed to resume suspended session");
+                    return (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to resume session: {}", e),
+                    )
+                        .into_response();
+                }
+                // Update persisted status to Running
+                let mut updated_meta = meta;
+                updated_meta.status = relais_core::session::types::SessionStatus::Running;
+                let _ = state
+                    .core
+                    .session_store
+                    .update_meta(&session_id, &updated_meta);
+            }
+        } else {
+            return (axum::http::StatusCode::NOT_FOUND, "Agent session not found").into_response();
+        }
     }
 
     let last_seq = params.last_seq;
