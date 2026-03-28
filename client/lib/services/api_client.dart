@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../models/agent_status.dart';
 import '../models/session.dart';
 
 class ApiClient {
@@ -55,6 +56,14 @@ class ApiClient {
   Future<Map<String, dynamic>> getTunnelStatus() async {
     final resp = await _dio.get('/api/v1/tunnel/status');
     return resp.data as Map<String, dynamic>;
+  }
+
+  Future<List<AgentStatusInfo>> getAgentStatuses() async {
+    final resp = await _dio.get('/api/v1/agents/status');
+    final list = resp.data as List;
+    return list
+        .map((e) => AgentStatusInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   void dispose() {
