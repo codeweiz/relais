@@ -81,7 +81,13 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     if (text.startsWith('/') && !text.contains(' ')) {
       final filter = text.substring(1);
       final dynamic = session.availableCommands ?? [];
+      final agentStatuses = ref.read(agentStatusProvider);
+      final currentProvider = agentStatuses[widget.sessionId]?.provider ?? 'claude-code';
       final builtins = ref.read(settingsProvider).builtinSlashCommands
+          .where((m) {
+            final providers = m['providers'] ?? '';
+            return providers.isEmpty || providers.split(',').contains(currentProvider);
+          })
           .map((m) => SlashCommand(name: m['name']!, description: m['description']!))
           .toList();
       final dynamicNames = dynamic.map((c) => c.name).toSet();
