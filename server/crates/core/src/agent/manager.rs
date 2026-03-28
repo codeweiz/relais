@@ -88,11 +88,29 @@ impl AgentManager {
         _model: &str,
         cwd: PathBuf,
     ) -> Result<(), String> {
+        self.create_agent_with_resume(session_id, name, provider, _model, cwd, None)
+            .await
+    }
+
+    /// Create and start a new agent session, optionally resuming a previous CLI session.
+    ///
+    /// When `resume_session_id` is `Some`, the underlying CLI agent is started
+    /// with `--resume <id>` so it picks up its prior conversation context.
+    pub async fn create_agent_with_resume(
+        &self,
+        session_id: SessionId,
+        name: &str,
+        provider: &str,
+        _model: &str,
+        cwd: PathBuf,
+        resume_session_id: Option<&str>,
+    ) -> Result<(), String> {
         info!(
             session_id = %session_id,
             name = %name,
             provider = %provider,
             cwd = %cwd.display(),
+            resume_session_id = ?resume_session_id,
             "creating agent"
         );
 
@@ -109,7 +127,7 @@ impl AgentManager {
         let cwd_str = cwd.display().to_string();
 
         // Attempt to start the backend. On failure, register in crashed state.
-        match backend.start(&cwd, None).await {
+        match backend.start(&cwd, resume_session_id).await {
             Ok(()) => {
                 let managed = ManagedAgent {
                     backend,
@@ -422,7 +440,17 @@ impl AgentManager {
                             AgentEvent::ToolResult { .. } => {
                                 (AgentActivity::Working, "Processing result...".to_string(), None)
                             }
-                            AgentEvent::TurnComplete { cost_usd, .. } => {
+                            AgentEvent::TurnComplete { session_id, cost_usd } => {
+                                // Persist the CLI session ID to meta.json so we
+                                // can resume this agent session later.
+                                if let Some(ref cli_sid) = session_id {
+                                    if let Ok(mut meta) = session_store.get_meta(&sid) {
+                                        if meta.acp_session_id.as_deref() != Some(cli_sid.as_str()) {
+                                            meta.acp_session_id = Some(cli_sid.clone());
+                                            let _ = session_store.update_meta(&sid, &meta);
+                                        }
+                                    }
+                                }
                                 (AgentActivity::Idle, String::new(), *cost_usd)
                             }
                             AgentEvent::Error(msg) => {

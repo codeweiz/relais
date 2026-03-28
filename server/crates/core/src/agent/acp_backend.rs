@@ -63,18 +63,18 @@ impl AcpBackend {
 
     /// Spawn the dedicated ACP thread, perform Initialize + NewSession, and
     /// return once the handshake succeeds (or an error is reported).
-    pub async fn start(&mut self, cwd: &Path, system_prompt: Option<&str>) -> Result<(), String> {
+    pub async fn start(&mut self, cwd: &Path, resume_session_id: Option<&str>) -> Result<(), String> {
         let cwd = cwd.to_path_buf();
         let event_tx = self.event_tx.clone();
         let kind = self.kind.clone();
-        let system_prompt_owned = system_prompt.map(|s| s.to_string());
+        let resume_session_id_owned = resume_session_id.map(|s| s.to_string());
         let (cmd_tx, cmd_rx) = mpsc::channel::<AcpCmd>(32);
         let (ready_tx, ready_rx) = oneshot::channel::<Result<(), String>>();
 
         let handle = std::thread::Builder::new()
             .name(format!("{}-acp", self.kind))
             .spawn(move || {
-                run_acp_thread(kind, cwd, event_tx, cmd_rx, ready_tx, system_prompt_owned);
+                run_acp_thread(kind, cwd, event_tx, cmd_rx, ready_tx, resume_session_id_owned);
             })
             .map_err(|e| format!("Failed to spawn ACP thread: {}", e))?;
 
@@ -165,7 +165,7 @@ fn run_acp_thread(
     event_tx: broadcast::Sender<AgentEvent>,
     cmd_rx: mpsc::Receiver<AcpCmd>,
     ready_tx: oneshot::Sender<Result<(), String>>,
-    system_prompt: Option<String>,
+    resume_session_id: Option<String>,
 ) {
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -183,7 +183,7 @@ fn run_acp_thread(
         let local = tokio::task::LocalSet::new();
         local
             .run_until(async move {
-                match acp_session_loop(kind, cwd, event_tx, cmd_rx, ready_tx, system_prompt).await {
+                match acp_session_loop(kind, cwd, event_tx, cmd_rx, ready_tx, resume_session_id).await {
                     Ok(()) => {}
                     Err(e) => tracing::error!("[{}-acp] session loop error: {}", kind_name, e),
                 }
@@ -204,7 +204,7 @@ async fn acp_session_loop(
     event_tx: broadcast::Sender<AgentEvent>,
     mut cmd_rx: mpsc::Receiver<AcpCmd>,
     ready_tx: oneshot::Sender<Result<(), String>>,
-    system_prompt: Option<String>,
+    resume_session_id: Option<String>,
 ) -> Result<(), String> {
     use acp::Agent as _;
     use agent_client_protocol as acp;
@@ -220,14 +220,14 @@ async fn acp_session_loop(
         AgentKind::Claude => {
             tracing::info!("[{}-acp] step: spawning claude bridge", kind);
             let (r, w, h) =
-                super::claude_bridge::spawn_claude_bridge(cwd.clone(), system_prompt.clone());
+                super::claude_bridge::spawn_claude_bridge(cwd.clone(), resume_session_id.clone());
             tracing::info!("[{}-acp] step: claude bridge spawned", kind);
             (r, w, Some(h))
         }
         _ => {
             tracing::info!("[{}-acp] step: spawning native ACP subprocess", kind);
             let (r, w) =
-                super::native_acp::spawn_native_acp(&kind, &cwd, system_prompt.as_deref())?;
+                super::native_acp::spawn_native_acp(&kind, &cwd, resume_session_id.as_deref())?;
             tracing::info!("[{}-acp] step: native ACP subprocess spawned", kind);
             (r, w, None)
         }
