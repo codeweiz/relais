@@ -1,4 +1,3 @@
-import 'dart:math' show min;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import '../models/slash_command.dart';
@@ -140,8 +139,7 @@ class _DesktopOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final screenHeight = MediaQuery.of(context).size.height;
-    final maxHeight = min(6 * 40.0, screenHeight * 0.4);
+    const maxHeight = 240.0; // Fixed max, about 5-6 items
 
     return CompositedTransformFollower(
       link: layerLink,
@@ -162,7 +160,6 @@ class _DesktopOverlay extends StatelessWidget {
                           ?.copyWith(color: theme.colorScheme.outline)),
                 )
               : ListView.builder(
-                  shrinkWrap: true,
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   itemCount: commands.length,
                   itemBuilder: (context, index) {

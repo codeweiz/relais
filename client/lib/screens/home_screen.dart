@@ -322,22 +322,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             t.status != 'cancelled')
         .toList();
 
+    final expandedHeight =
+        (MediaQuery.of(context).size.height * 0.35).clamp(140.0, 320.0);
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
-      constraints: BoxConstraints(
-        maxHeight: _panelExpanded
-            ? MediaQuery.of(context).size.height * 0.40
-            : 56,
-      ),
+      height: _panelExpanded ? expandedHeight : 56,
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
         border: Border(
           top: BorderSide(color: theme.colorScheme.outlineVariant),
         ),
       ),
+      clipBehavior: Clip.hardEdge,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
           InkWell(
             onTap: () => setState(() => _panelExpanded = !_panelExpanded),
@@ -425,6 +424,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   Widget _buildTasksList(BuildContext context, List<TaskInfo> activeTasks) {
     final theme = Theme.of(context);
+    final agents = ref.read(agentStatusProvider);
     if (activeTasks.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(20),
@@ -441,7 +441,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       itemCount: activeTasks.length,
       itemBuilder: (context, index) {
         final task = activeTasks[index];
-        return _TaskRow(task: task);
+        return _TaskRow(
+          task: task,
+          agents: agents,
+          onCancel: () =>
+              ref.read(taskProvider.notifier).cancelTask(task.id),
+        );
       },
     );
   }
@@ -861,7 +866,14 @@ class _QuickMessageSheetState extends ConsumerState<_QuickMessageSheet> {
 
 class _TaskRow extends StatelessWidget {
   final TaskInfo task;
-  const _TaskRow({required this.task});
+  final Map<String, AgentStatusInfo> agents;
+  final VoidCallback onCancel;
+
+  const _TaskRow({
+    required this.task,
+    required this.agents,
+    required this.onCancel,
+  });
 
   Color _priorityColor(String priority) {
     switch (priority.toUpperCase()) {
@@ -889,12 +901,24 @@ class _TaskRow extends StatelessWidget {
     }
   }
 
+  void _navigateToAgent(BuildContext context) {
+    // Try to find the target agent's session by name
+    final targetAgent = agents.values
+        .where((a) => a.name == task.targetAgent)
+        .firstOrNull;
+    if (targetAgent != null) {
+      context.push('/agent/${targetAgent.sessionId}');
+    } else if (task.sessionId != null) {
+      context.push('/agent/${task.sessionId}');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return InkWell(
       onTap: task.isRunning && task.sessionId != null
-          ? () => context.push('/agent/${task.sessionId}')
+          ? () => _navigateToAgent(context)
           : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
@@ -938,6 +962,21 @@ class _TaskRow extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             _statusIcon(task.status),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                iconSize: 16,
+                icon: Icon(
+                  Icons.close,
+                  color: theme.colorScheme.error.withValues(alpha: 0.7),
+                ),
+                tooltip: S.cancel,
+                onPressed: onCancel,
+              ),
+            ),
           ],
         ),
       ),

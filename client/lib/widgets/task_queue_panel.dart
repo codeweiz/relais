@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../models/task.dart';
+import '../models/agent_status.dart';
 import '../l10n/strings.dart';
 
 class TaskQueuePanel extends StatefulWidget {
   final List<TaskInfo> tasks;
   final VoidCallback onNewTask;
+  final void Function(String taskId) onCancelTask;
+  final Map<String, AgentStatusInfo> agents;
 
   const TaskQueuePanel({
     super.key,
     required this.tasks,
     required this.onNewTask,
+    required this.onCancelTask,
+    required this.agents,
   });
 
   @override
@@ -49,6 +54,19 @@ class _TaskQueuePanelState extends State<TaskQueuePanel> {
         return const Text('\u{1F535}', style: TextStyle(fontSize: 12));
       default:
         return const Text('\u26AA', style: TextStyle(fontSize: 12));
+    }
+  }
+
+  void _onTaskTap(TaskInfo task) {
+    if (!task.isRunning || task.sessionId == null) return;
+    // Try to find the target agent's session by name
+    final targetAgent = widget.agents.values
+        .where((a) => a.name == task.targetAgent)
+        .firstOrNull;
+    if (targetAgent != null) {
+      context.push('/agent/${targetAgent.sessionId}');
+    } else if (task.sessionId != null) {
+      context.push('/agent/${task.sessionId}');
     }
   }
 
@@ -111,8 +129,7 @@ class _TaskQueuePanelState extends State<TaskQueuePanel> {
                         final task = active[index];
                         return InkWell(
                           onTap: task.isRunning && task.sessionId != null
-                              ? () =>
-                                  context.push('/agent/${task.sessionId}')
+                              ? () => _onTaskTap(task)
                               : null,
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
@@ -161,6 +178,24 @@ class _TaskQueuePanelState extends State<TaskQueuePanel> {
                                 const SizedBox(width: 8),
                                 // Status
                                 _statusIcon(task.status),
+                                const SizedBox(width: 4),
+                                // Cancel button
+                                SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: IconButton(
+                                    padding: EdgeInsets.zero,
+                                    iconSize: 16,
+                                    icon: Icon(
+                                      Icons.close,
+                                      color: theme.colorScheme.error
+                                          .withValues(alpha: 0.7),
+                                    ),
+                                    tooltip: S.cancel,
+                                    onPressed: () =>
+                                        widget.onCancelTask(task.id),
+                                  ),
+                                ),
                               ],
                             ),
                           ),

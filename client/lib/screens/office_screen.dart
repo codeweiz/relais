@@ -180,6 +180,9 @@ class _OfficeScreenState extends ConsumerState<OfficeScreen>
           TaskQueuePanel(
             tasks: tasks,
             onNewTask: () => _showDispatchDialog(context, ref),
+            onCancelTask: (id) =>
+                ref.read(taskProvider.notifier).cancelTask(id),
+            agents: agents,
           ),
         ],
       ),

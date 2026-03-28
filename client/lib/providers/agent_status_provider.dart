@@ -65,12 +65,17 @@ class AgentStatusNotifier extends StateNotifier<Map<String, AgentStatusInfo>> {
             final sessionId = json['session_id'] as String;
             final existing = state[sessionId];
             if (existing != null) {
+              final incomingActivity = json['activity'] as String? ?? '';
               final updated = AgentStatusInfo(
                 sessionId: sessionId,
                 name: existing.name,
                 provider: existing.provider,
                 status: json['status'] as String? ?? existing.status,
-                activity: json['activity'] as String? ?? '',
+                // Preserve last meaningful activity when incoming is empty
+                // (mirrors server-side status_registry logic)
+                activity: incomingActivity.isEmpty
+                    ? existing.activity
+                    : incomingActivity,
                 costUsd: existing.costUsd,
               );
               state = {...state, sessionId: updated};
