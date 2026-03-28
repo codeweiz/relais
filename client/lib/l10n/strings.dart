@@ -51,5 +51,13 @@ class S {
   static String get noCommandsAvailable => _t('暂无可用命令', 'No commands available');
   static String get loadingCommands => _t('加载命令中...', 'Loading commands...');
   static String get slashCommandHint => _t('输入筛选命令...', 'Filter commands...');
+  static String get office => _t('办公室', 'Office');
+  static String get noAgentsRunning => _t('暂无运行中的 Agent', 'No agents running');
+  static String get tapToChat => _t('点击进入对话', 'Tap to chat');
+  static String get statusIdle => _t('空闲', 'Idle');
+  static String get statusWorking => _t('工作中', 'Working');
+  static String get statusThinking => _t('思考中', 'Thinking');
+  static String get statusToolCalling => _t('调用工具', 'Calling tool');
+  static String get statusError => _t('错误', 'Error');
   static String _t(String zh, String en) => locale == 'zh' ? zh : en;
 }
