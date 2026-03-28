@@ -153,6 +153,12 @@ pub struct Task {
     /// Session ID if the task is currently running.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+    /// Name of the agent this task is assigned to. None = unassigned.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_agent: Option<String>,
+    /// Session ID of the agent that dispatched this task (for completion notification).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_session_id: Option<String>,
     /// Task result (set when completed or failed).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub result: Option<TaskResult>,
@@ -176,6 +182,8 @@ impl Task {
             started_at: None,
             completed_at: None,
             session_id: None,
+            target_agent: None,
+            source_session_id: None,
             result: None,
         }
     }
@@ -201,6 +209,24 @@ impl Task {
     /// Add tags.
     pub fn with_tags(mut self, tags: Vec<String>) -> Self {
         self.tags = tags;
+        self
+    }
+
+    /// Set the target agent name. Empty string is treated as None (unassigned).
+    pub fn with_target_agent(mut self, name: impl Into<String>) -> Self {
+        let name = name.into();
+        self.target_agent = if name.is_empty() { None } else { Some(name) };
+        self
+    }
+
+    /// Set the source session ID (who dispatched this task).
+    pub fn with_source_session(mut self, session_id: impl Into<String>) -> Self {
+        let session_id = session_id.into();
+        self.source_session_id = if session_id.is_empty() {
+            None
+        } else {
+            Some(session_id)
+        };
         self
     }
 
