@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../models/agent_status.dart';
 import '../models/session.dart';
+import '../models/task.dart';
 
 class ApiClient {
   final Dio _dio;
@@ -64,6 +65,37 @@ class ApiClient {
     return list
         .map((e) => AgentStatusInfo.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<List<TaskInfo>> getTasks() async {
+    final resp = await _dio.get('/api/v1/tasks');
+    final list = resp.data as List;
+    return list
+        .map((e) => TaskInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createTask({
+    required String title,
+    String prompt = '',
+    String priority = 'p1',
+    String? targetAgent,
+    String? sourceSessionId,
+    String? cwd,
+  }) async {
+    final resp = await _dio.post('/api/v1/tasks', data: {
+      'title': title,
+      if (prompt.isNotEmpty) 'prompt': prompt,
+      'priority': priority,
+      if (targetAgent != null) 'target_agent': targetAgent,
+      if (sourceSessionId != null) 'source_session_id': sourceSessionId,
+      if (cwd != null) 'cwd': cwd,
+    });
+    return resp.data as Map<String, dynamic>;
+  }
+
+  Future<void> cancelTask(String id) async {
+    await _dio.delete('/api/v1/tasks/$id');
   }
 
   void dispose() {

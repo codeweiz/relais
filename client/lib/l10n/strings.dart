@@ -63,5 +63,21 @@ class S {
   static String get addCommand => _t('添加命令', 'Add Command');
   static String get commandName => _t('命令名称', 'Command Name');
   static String get commandDescription => _t('命令描述', 'Command Description');
+  static String get dispatchTo => _t('派发给', 'Dispatch to');
+  static String dispatched(String name, String task) =>
+      _t('已派发给 $name：$task', 'Dispatched to $name: $task');
+  static String get taskQueue => _t('任务队列', 'Task Queue');
+  static String get unassigned => _t('待分配', 'Unassigned');
+  static String get newTask => _t('新建任务', 'New Task');
+  static String get taskTitle => _t('任务标题', 'Task title');
+  static String get taskDescription => _t('任务描述', 'Task description');
+  static String get priority => _t('优先级', 'Priority');
+  static String get dispatch => _t('派发', 'Dispatch');
+  static String get selectAgent => _t('选择 Agent', 'Select Agent');
+  static String taskCompleted(String name, String task) =>
+      _t('$name 完成了任务：$task', '$name completed: $task');
+  static String taskFailed(String name, String task) =>
+      _t('$name 任务失败：$task', '$name failed: $task');
+  static String get agentNotFound => _t('目标 Agent 不存在', 'Target agent not found');
   static String _t(String zh, String en) => locale == 'zh' ? zh : en;
 }
