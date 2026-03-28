@@ -23,6 +23,7 @@ class AgentScreen extends ConsumerStatefulWidget {
 class _AgentScreenState extends ConsumerState<AgentScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
+  final _inputFocusNode = FocusNode();
   AgentSession? _session;
   final _speech = stt.SpeechToText();
   bool _isListening = false;
@@ -101,6 +102,8 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       offset: _inputController.text.length,
     );
     _showingMenu = false;
+    // Re-focus the text field so the user can type arguments or press Enter
+    _inputFocusNode.requestFocus();
   }
 
   void _onMenuDismissed() {
@@ -165,6 +168,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
     _session?.removeListener(_onUpdate);
     _inputController.dispose();
     _scrollController.dispose();
+    _inputFocusNode.dispose();
     _menuController.dismiss();
     super.dispose();
   }
@@ -235,6 +239,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
                       link: _layerLink,
                       child: TextField(
                         controller: _inputController,
+                        focusNode: _inputFocusNode,
                         decoration: InputDecoration(
                           hintText: S.sendMessage,
                           border: const OutlineInputBorder(),
