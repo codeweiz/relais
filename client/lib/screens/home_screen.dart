@@ -8,13 +8,13 @@ import '../models/agent_status.dart';
 import '../models/session.dart';
 import '../models/slash_command.dart';
 import '../models/task.dart';
+import '../services/api_client.dart';
 import '../providers/agent_provider.dart';
 import '../providers/agent_status_provider.dart';
 import '../providers/server_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/task_provider.dart';
-import '../widgets/agent_picker_menu.dart';
 import '../widgets/dispatch_dialog.dart';
 import '../widgets/office_painter.dart';
 import '../widgets/session_card.dart';
@@ -74,15 +74,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   // ── Create helpers ──────────────────────────────────────────────────────────
 
-  Future<void> _createSession(SessionKind kind) async {
-    final name = kind == SessionKind.agent ? 'Agent' : 'Terminal';
+  Future<void> _createSession(SessionKind kind, {String? name}) async {
+    final displayName = (name != null && name.isNotEmpty)
+        ? name
+        : (kind == SessionKind.agent ? 'Agent' : 'Terminal');
     final notifier = ref.read(sessionProvider.notifier);
 
     String? id;
     if (kind == SessionKind.agent) {
-      id = await notifier.createAgent(name);
+      id = await notifier.createAgent(displayName);
     } else {
-      id = await notifier.createTerminal(name);
+      id = await notifier.createTerminal(displayName);
     }
 
     if (id != null && mounted) {
@@ -122,7 +124,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               title: Text(S.newTerminal),
               onTap: () {
                 Navigator.pop(context);
-                _createSession(SessionKind.terminal);
+                _showNameDialog(SessionKind.terminal);
               },
             ),
             ListTile(
@@ -130,7 +132,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               title: Text(S.newAgent),
               onTap: () {
                 Navigator.pop(context);
-                _createSession(SessionKind.agent);
+                _showAgentCreateDialog();
               },
             ),
             ListTile(
@@ -143,6 +145,58 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showNameDialog(SessionKind kind) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(S.newTerminal),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(
+            labelText: S.name,
+            hintText: 'e.g. Build Server',
+            border: const OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(S.cancel)),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _createSession(kind, name: controller.text.trim());
+            },
+            child: Text(S.create),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAgentCreateDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => _AgentCreateDialog(
+        onCreated: (name, provider) async {
+          final server = ref.read(serverProvider).server;
+          if (server == null) return;
+          final api = ApiClient(baseUrl: server.url, token: server.token);
+          final resp = await api.createSession(
+            name: name,
+            type: 'agent',
+            provider: provider,
+          );
+          final id = resp['id'] as String?;
+          if (id != null && mounted) {
+            ref.read(sessionProvider.notifier).refresh();
+            context.push('/agent/$id');
+          }
+        },
       ),
     );
   }
@@ -331,9 +385,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       height: _panelExpanded ? expandedHeight : 56,
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
-        border: Border(
-          top: BorderSide(color: theme.colorScheme.outlineVariant),
-        ),
       ),
       clipBehavior: Clip.hardEdge,
       child: Column(
@@ -492,6 +543,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           Expanded(
             child: _buildWorkspace(context, agentList, tasks),
           ),
+          Container(
+            height: 1,
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
           _buildBottomPanel(context, sessions, tasks),
         ],
       ),
@@ -581,19 +636,16 @@ class _QuickMessageSheetState extends ConsumerState<_QuickMessageSheet> {
   final _speech = stt.SpeechToText();
   bool _isListening = false;
 
-  final _layerLink = LayerLink();
-  final _menuController = SlashCommandMenuController();
-  bool _showingMenu = false;
-  final _agentPickerController = AgentPickerController();
-  bool _showingAgentPicker = false;
+  // Inline slash-command and agent picker state (avoids Overlay context issues
+  // inside ModalBottomSheet).
+  List<SlashCommand> _filteredCommands = [];
+  List<AgentStatusInfo> _filteredAgents = [];
 
   @override
   void dispose() {
     _speech.stop();
     _inputController.dispose();
     _inputFocusNode.dispose();
-    _menuController.dismiss();
-    _agentPickerController.dismiss();
     super.dispose();
   }
 
@@ -607,50 +659,26 @@ class _QuickMessageSheetState extends ConsumerState<_QuickMessageSheet> {
           .toList();
       final dynamicNames = dynamic.map((c) => c.name).toSet();
       final merged = [...dynamic, ...builtins.where((c) => !dynamicNames.contains(c.name))];
-
-      if (!_showingMenu) {
-        _showingMenu = true;
-        _menuController.show(
-          context: context,
-          layerLink: _layerLink,
-          commands: merged,
-          filter: filter,
-          onSelect: _onCommandSelected,
-          onDismiss: () => _showingMenu = false,
-        );
-      } else {
-        _menuController.updateFilter(
-          context: context,
-          layerLink: _layerLink,
-          commands: merged,
-          filter: filter,
-          onSelect: _onCommandSelected,
-          onDismiss: () => _showingMenu = false,
-        );
-      }
-    } else {
-      _dismissMenu();
-    }
-
-    // @ agent picker detection
-    if (text.startsWith('@') && !text.contains(' ')) {
+      setState(() {
+        _filteredCommands = filterCommands(merged, filter);
+        _filteredAgents = [];
+      });
+    } else if (text.startsWith('@') && !text.contains(' ')) {
+      // @ agent picker detection
       final agents = ref.read(agentStatusProvider);
-      final agentList = agents.values
-          .where((a) => a.sessionId != widget.sessionId)
-          .toList();
-      if (agentList.isNotEmpty && !_showingAgentPicker) {
-        _showingAgentPicker = true;
-        _agentPickerController.show(
-          context: context,
-          layerLink: _layerLink,
-          agents: agentList,
-          onSelect: _onAgentSelected,
-          onDismiss: () => _showingAgentPicker = false,
-        );
+      setState(() {
+        _filteredAgents = agents.values
+            .where((a) => a.sessionId != widget.sessionId)
+            .toList();
+        _filteredCommands = [];
+      });
+    } else {
+      if (_filteredCommands.isNotEmpty || _filteredAgents.isNotEmpty) {
+        setState(() {
+          _filteredCommands = [];
+          _filteredAgents = [];
+        });
       }
-    } else if (_showingAgentPicker) {
-      _agentPickerController.dismiss();
-      _showingAgentPicker = false;
     }
   }
 
@@ -659,15 +687,8 @@ class _QuickMessageSheetState extends ConsumerState<_QuickMessageSheet> {
     _inputController.selection = TextSelection.collapsed(
       offset: _inputController.text.length,
     );
-    _showingMenu = false;
+    setState(() => _filteredCommands = []);
     _inputFocusNode.requestFocus();
-  }
-
-  void _dismissMenu() {
-    if (_showingMenu) {
-      _menuController.dismiss();
-      _showingMenu = false;
-    }
   }
 
   void _onAgentSelected(AgentStatusInfo agent) {
@@ -675,7 +696,7 @@ class _QuickMessageSheetState extends ConsumerState<_QuickMessageSheet> {
     _inputController.selection = TextSelection.collapsed(
       offset: _inputController.text.length,
     );
-    _showingAgentPicker = false;
+    setState(() => _filteredAgents = []);
     _inputFocusNode.requestFocus();
   }
 
@@ -727,7 +748,7 @@ class _QuickMessageSheetState extends ConsumerState<_QuickMessageSheet> {
   }
 
   void _send() {
-    _dismissMenu();
+    setState(() { _filteredCommands = []; _filteredAgents = []; });
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
     if (_isListening) {
@@ -802,6 +823,73 @@ class _QuickMessageSheetState extends ConsumerState<_QuickMessageSheet> {
               style: theme.textTheme.titleMedium,
             ),
           ),
+          // Inline slash command list (avoids Overlay context issues in ModalBottomSheet)
+          if (_filteredCommands.isNotEmpty)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: _filteredCommands.length,
+                itemBuilder: (context, index) {
+                  final cmd = _filteredCommands[index];
+                  return InkWell(
+                    onTap: () => _onCommandSelected(cmd),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Row(
+                        children: [
+                          Text(
+                            '/${cmd.name}',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              cmd.description,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.outline,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          // Inline agent picker
+          if (_filteredAgents.isNotEmpty)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 200),
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: _filteredAgents.length,
+                itemBuilder: (context, index) {
+                  final agent = _filteredAgents[index];
+                  return ListTile(
+                    dense: true,
+                    leading: CircleAvatar(
+                      backgroundColor: providerColor(agent.provider),
+                      radius: 14,
+                      child: Text(
+                        agent.name[0].toUpperCase(),
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ),
+                    title: Text(agent.name),
+                    subtitle: Text('${agent.provider} · ${agent.status}'),
+                    onTap: () => _onAgentSelected(agent),
+                  );
+                },
+              ),
+            ),
           Container(
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
             child: SafeArea(
@@ -817,23 +905,20 @@ class _QuickMessageSheetState extends ConsumerState<_QuickMessageSheet> {
                     tooltip: S.dispatchTo,
                   ),
                   Expanded(
-                    child: CompositedTransformTarget(
-                      link: _layerLink,
-                      child: TextField(
-                        controller: _inputController,
-                        focusNode: _inputFocusNode,
-                        autofocus: true,
-                        decoration: InputDecoration(
-                          hintText: S.sendMessage,
-                          border: const OutlineInputBorder(),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          isDense: true,
-                        ),
-                        onChanged: _onInputChanged,
-                        onSubmitted: (_) => _send(),
-                        textInputAction: TextInputAction.send,
+                    child: TextField(
+                      controller: _inputController,
+                      focusNode: _inputFocusNode,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: S.sendMessage,
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        isDense: true,
                       ),
+                      onChanged: _onInputChanged,
+                      onSubmitted: (_) => _send(),
+                      textInputAction: TextInputAction.send,
                     ),
                   ),
                   const SizedBox(width: 4),
@@ -980,6 +1065,91 @@ class _TaskRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Agent create dialog ──────────────────────────────────────────────────────
+
+class _AgentCreateDialog extends StatefulWidget {
+  final Future<void> Function(String name, String provider) onCreated;
+  const _AgentCreateDialog({required this.onCreated});
+  @override
+  State<_AgentCreateDialog> createState() => _AgentCreateDialogState();
+}
+
+class _AgentCreateDialogState extends State<_AgentCreateDialog> {
+  final _nameController = TextEditingController();
+  String _provider = 'claude-code';
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: Text(S.newAgent),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _nameController,
+            decoration: InputDecoration(
+              labelText: S.name,
+              hintText: 'e.g. Frontend Dev',
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+            autofocus: true,
+          ),
+          const SizedBox(height: 12),
+          Text(S.selectAgent, style: theme.textTheme.labelMedium),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('Claude Code'),
+                selected: _provider == 'claude-code',
+                onSelected: (_) => setState(() => _provider = 'claude-code'),
+              ),
+              ChoiceChip(
+                label: const Text('Codex CLI'),
+                selected: _provider == 'codex',
+                onSelected: (_) => setState(() => _provider = 'codex'),
+              ),
+              ChoiceChip(
+                label: const Text('Gemini CLI'),
+                selected: _provider == 'gemini',
+                onSelected: (_) => setState(() => _provider = 'gemini'),
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(S.cancel),
+        ),
+        FilledButton(
+          onPressed: () {
+            final name = _nameController.text.trim().isEmpty
+                ? _provider == 'claude-code'
+                    ? 'Claude Code'
+                    : _provider
+                : _nameController.text.trim();
+            Navigator.pop(context);
+            widget.onCreated(name, _provider);
+          },
+          child: Text(S.create),
+        ),
+      ],
     );
   }
 }

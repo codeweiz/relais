@@ -81,5 +81,7 @@ class S {
   static String taskFailed(String name, String task) =>
       _t('$name 任务失败：$task', '$name failed: $task');
   static String get agentNotFound => _t('目标 Agent 不存在', 'Target agent not found');
+  static String get name => _t('名称', 'Name');
+  static String get create => _t('创建', 'Create');
   static String _t(String zh, String en) => locale == 'zh' ? zh : en;
 }
