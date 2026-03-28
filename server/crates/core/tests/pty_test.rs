@@ -27,7 +27,9 @@ async fn test_create_pty_session() {
     require_tmux();
     let event_bus = Arc::new(relais_core::event_bus::EventBus::new());
     let config = Arc::new(relais_core::config::Config::default());
-    let manager = PtyManager::new(event_bus, config);
+    let tmp = tempfile::tempdir().unwrap();
+    let session_store = Arc::new(relais_core::session::store::SessionStore::new(tmp.path().to_path_buf()).unwrap());
+    let manager = PtyManager::new(event_bus, config, session_store);
 
     let session_id = manager
         .create_session("test-session", None)
@@ -55,7 +57,9 @@ async fn test_pty_output() {
     require_tmux();
     let event_bus = Arc::new(relais_core::event_bus::EventBus::new());
     let config = Arc::new(relais_core::config::Config::default());
-    let manager = PtyManager::new(event_bus.clone(), config);
+    let tmp = tempfile::tempdir().unwrap();
+    let session_store = Arc::new(relais_core::session::store::SessionStore::new(tmp.path().to_path_buf()).unwrap());
+    let manager = PtyManager::new(event_bus.clone(), config, session_store);
 
     let session_id = manager
         .create_session("echo-test", None)
@@ -114,7 +118,9 @@ async fn test_pty_manager_crud() {
     require_tmux();
     let event_bus = Arc::new(relais_core::event_bus::EventBus::new());
     let config = Arc::new(relais_core::config::Config::default());
-    let manager = PtyManager::new(event_bus, config);
+    let tmp = tempfile::tempdir().unwrap();
+    let session_store = Arc::new(relais_core::session::store::SessionStore::new(tmp.path().to_path_buf()).unwrap());
+    let manager = PtyManager::new(event_bus, config, session_store);
 
     // Create two sessions
     let id1 = manager
@@ -167,7 +173,9 @@ async fn test_pty_resize() {
     require_tmux();
     let event_bus = Arc::new(relais_core::event_bus::EventBus::new());
     let config = Arc::new(relais_core::config::Config::default());
-    let manager = PtyManager::new(event_bus, config);
+    let tmp = tempfile::tempdir().unwrap();
+    let session_store = Arc::new(relais_core::session::store::SessionStore::new(tmp.path().to_path_buf()).unwrap());
+    let manager = PtyManager::new(event_bus, config, session_store);
 
     let session_id = manager
         .create_session("resize-test", None)
@@ -190,7 +198,9 @@ async fn test_pty_resize() {
 async fn test_kill_nonexistent_session() {
     let event_bus = Arc::new(relais_core::event_bus::EventBus::new());
     let config = Arc::new(relais_core::config::Config::default());
-    let manager = PtyManager::new(event_bus, config);
+    let tmp = tempfile::tempdir().unwrap();
+    let session_store = Arc::new(relais_core::session::store::SessionStore::new(tmp.path().to_path_buf()).unwrap());
+    let manager = PtyManager::new(event_bus, config, session_store);
 
     let result = manager.kill_session("nonexistent").await;
     assert!(result.is_err(), "killing nonexistent session should fail");
@@ -200,7 +210,9 @@ async fn test_kill_nonexistent_session() {
 async fn test_write_nonexistent_session() {
     let event_bus = Arc::new(relais_core::event_bus::EventBus::new());
     let config = Arc::new(relais_core::config::Config::default());
-    let manager = PtyManager::new(event_bus, config);
+    let tmp = tempfile::tempdir().unwrap();
+    let session_store = Arc::new(relais_core::session::store::SessionStore::new(tmp.path().to_path_buf()).unwrap());
+    let manager = PtyManager::new(event_bus, config, session_store);
 
     let result = manager.write_input("nonexistent", b"hello");
     assert!(

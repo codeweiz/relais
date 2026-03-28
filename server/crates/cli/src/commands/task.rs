@@ -11,9 +11,10 @@ pub fn handle(action: &TaskAction) -> Result<()> {
         TaskAction::Add {
             title,
             priority,
+            target_agent,
             cwd,
             depends_on,
-        } => add_task(&base_url, &token, title, priority, cwd, depends_on),
+        } => add_task(&base_url, &token, title, priority, target_agent, cwd, depends_on),
         TaskAction::List => list_tasks(&base_url, &token),
         TaskAction::Cancel { id } => cancel_task(&base_url, &token, id),
         TaskAction::Pause => pause_scheduler(&base_url, &token),
@@ -26,6 +27,7 @@ fn add_task(
     token: &str,
     title: &str,
     priority: &Option<String>,
+    target_agent: &Option<String>,
     cwd: &Option<String>,
     depends_on: &Option<String>,
 ) -> Result<()> {
@@ -35,6 +37,9 @@ fn add_task(
     body.insert("title".into(), serde_json::Value::String(title.to_string()));
     if let Some(p) = priority {
         body.insert("priority".into(), serde_json::Value::String(p.clone()));
+    }
+    if let Some(agent) = target_agent {
+        body.insert("target_agent".into(), serde_json::Value::String(agent.clone()));
     }
     if let Some(c) = cwd {
         body.insert("cwd".into(), serde_json::Value::String(c.clone()));

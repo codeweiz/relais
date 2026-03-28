@@ -220,6 +220,18 @@ fn control_event_to_json(event: &ControlEvent) -> Option<String> {
                 "activity": activity,
             })
         }
+        ControlEvent::TaskAdded {
+            task_id,
+            name,
+            target_agent,
+        } => {
+            serde_json::json!({
+                "type": "task_added",
+                "task_id": task_id,
+                "name": name,
+                "target_agent": target_agent,
+            })
+        }
         ControlEvent::TaskCompleted {
             task_id,
             source_session_id,

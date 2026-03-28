@@ -72,6 +72,32 @@ pub async fn start(cli: &Cli) -> anyhow::Result<()> {
         tracing::warn!(error = %e, "Failed to load task pool from disk (continuing with empty pool)");
     }
 
+    // 7b. Restore suspended agent sessions into the status registry so they
+    //     appear in the client's agent list and can be resumed on connect.
+    {
+        use relais_core::session::types::{SessionStatus, SessionType};
+
+        if let Ok(sessions) = core.session_store.list() {
+            let mut count = 0u32;
+            for meta in &sessions {
+                if matches!(meta.session_type, SessionType::Agent)
+                    && meta.status == SessionStatus::Suspended
+                {
+                    let provider = meta
+                        .agent
+                        .as_ref()
+                        .map(|a| a.provider.as_str())
+                        .unwrap_or("unknown");
+                    core.status_registry.register(&meta.id, &meta.name, provider);
+                    count += 1;
+                }
+            }
+            if count > 0 {
+                tracing::info!(count, "registered suspended agent sessions in status registry");
+            }
+        }
+    }
+
     // 8. Task dispatcher is already running (started by CoreState::new)
     tracing::info!("Task pool dispatcher started");
 

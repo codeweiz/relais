@@ -163,6 +163,9 @@ pub enum TaskAction {
         /// Priority: p0, p1 (default), or p2
         #[arg(long)]
         priority: Option<String>,
+        /// Target agent name (required for auto-dispatch)
+        #[arg(long)]
+        target_agent: Option<String>,
         /// Working directory for the task
         #[arg(long)]
         cwd: Option<String>,

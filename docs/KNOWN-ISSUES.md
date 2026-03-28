@@ -1,34 +1,38 @@
 # Known Issues — 2026-03-28
 
-## Critical
+All issues resolved.
+
+## Resolved
 
 ### 1. Bottom panel overflow on Home screen
-- AnimatedContainer 的高度计算有问题，导致 "BOTTOM OVERFLOWED" 错误
-- 需要检查 expandedHeight 计算和 Column 约束
+- **Root cause**: `BoxDecoration.border` adds implicit 1px padding inside Container, reducing child space from 56→55px while inner SizedBox remains 56px
+- **Fix**: Moved the border to a separate `Container(height:1)` widget above the panel, removed border from decoration
 
 ### 2. Tasks not consumed by agents
-- `get_next_executable()` 现在要求 `target_agent.is_some()`，但创建任务时 target_agent 可能没正确传入
-- 需要验证 `POST /api/v1/tasks` → Task 创建 → TaskDispatcher 消费 的全链路
+- Added `--target-agent` CLI flag
+- Fixed pool tests to include `with_target_agent()`
+- Added `TaskAdded` control event for real-time client refresh
+- Dispatcher now triggers immediate dispatch on `TaskAdded` (no 5s polling wait)
 
 ### 3. Task navigation to wrong agent
-- 点击任务跳转的是 `task.sessionId`（dispatcher 创建的 "task-xxx" session），不是目标 agent 的 session
-- 需要通过 agent name 查找正确的 session
+- Fixed in prior commit — `_navigateToAgent()` looks up agent by name first
 
 ### 4. Slash command menu height (QuickMessageSheet)
-- 在 QuickMessageSheet 的 ModalBottomSheet 内，slash command overlay 可能不受 240px 限制
-- BottomSheet 的 overlay context 和主页面不同
-
-## Important
+- Replaced overlay-based menu with inline display inside the bottom sheet Column
 
 ### 5. Session persistence
-- 服务端重启后所有终端和 agent 会话丢失
-- 需要持久化 session 元数据（name, provider, cwd, status）
-- 重启后重建 agent 连接
+- `session_store.create()` now called on agent and terminal session creation
+- Agent events persisted to `events.jsonl` via `session_store.append_event()`
+- On startup, suspended agents registered in status registry and listed in API
+- WebSocket handler auto-resumes suspended agent sessions on client connect
 
-### 6. Real-time updates 仍有延迟
-- AgentStatusProvider 已改为 WebSocket 驱动，但 agent activity 更新可能仍有延迟
-- 需要验证 server 端 AgentActivityChanged 事件的 throttle 逻辑
+### 6. Real-time updates delay
+- Removed 10-char text filter and conditional broadcast suppression
+- All status transitions now broadcast immediately
 
 ### 7. Last message display
-- Agent 头像上的最后消息气泡有时不显示
-- AgentStatusProvider 的 WebSocket handler 需要正确保留 activity
+- Fixed alongside Issue 6 — all text content flows through to clients
+
+### 8. Office area not refreshing after agent creation
+- **Root cause**: `agent_manager.create_agent()` never emitted `SessionCreated` event (only terminal sessions did)
+- **Fix**: Added `SessionCreated` emission in agent manager, so `agentStatusProvider` refreshes

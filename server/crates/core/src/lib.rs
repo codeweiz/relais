@@ -43,6 +43,7 @@ impl CoreState {
         let pty_manager = Arc::new(pty::manager::PtyManager::new(
             Arc::clone(&event_bus),
             Arc::clone(&config),
+            Arc::clone(&session_store),
         ));
 
         let status_registry = Arc::new(agent::status_registry::AgentStatusRegistry::new());
@@ -50,6 +51,7 @@ impl CoreState {
         let agent_manager = Arc::new(agent::manager::AgentManager::new(
             Arc::clone(&event_bus),
             Arc::clone(&status_registry),
+            Arc::clone(&session_store),
         ));
 
         // Task pool backed by ~/.relais/tasks.jsonl

@@ -68,6 +68,11 @@ pub enum ControlEvent {
         status: String,
         activity: String,
     },
+    TaskAdded {
+        task_id: String,
+        name: String,
+        target_agent: Option<String>,
+    },
     TaskCompleted {
         task_id: String,
         source_session_id: String,
