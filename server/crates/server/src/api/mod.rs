@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod plugins;
 pub mod sessions;
 pub mod status;

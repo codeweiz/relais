@@ -9,7 +9,7 @@ use serde::Serialize;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    api::{plugins, sessions, status, tasks, token, tunnel},
+    api::{agents, plugins, sessions, status, tasks, token, tunnel},
     auth::auth_middleware,
     logging::access_log_middleware,
     rate_limit::rate_limit_middleware,
@@ -56,6 +56,8 @@ fn api_routes() -> Router<AppState> {
         .route("/tunnel/status", get(tunnel::tunnel_status))
         .route("/tunnel/start", post(tunnel::start_tunnel))
         .route("/tunnel/stop", post(tunnel::stop_tunnel))
+        // Agents
+        .route("/agents/status", get(agents::get_agent_statuses))
 }
 
 /// Assemble the complete application router.
