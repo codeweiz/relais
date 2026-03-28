@@ -78,6 +78,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: Text(serverState.server?.name ?? 'Relais'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.grid_view),
+            tooltip: S.office,
+            onPressed: () => context.push('/office'),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.read(sessionProvider.notifier).refresh(),
           ),

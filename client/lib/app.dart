@@ -7,6 +7,7 @@ import 'theme/app_theme.dart';
 import 'providers/settings_provider.dart';
 import 'screens/connect_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/office_screen.dart';
 import 'screens/terminal_screen.dart';
 import 'screens/agent_screen.dart';
 import 'screens/settings_screen.dart';
@@ -55,6 +56,17 @@ final _router = GoRouter(
     GoRoute(
       path: '/settings',
       builder: (context, state) => const SettingsScreen(),
+    ),
+    GoRoute(
+      path: '/office',
+      pageBuilder: (context, state) => CustomTransitionPage(
+        key: const ValueKey('office'),
+        child: const OfficeScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
     ),
   ],
 );
