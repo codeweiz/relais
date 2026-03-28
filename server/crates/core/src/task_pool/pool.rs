@@ -303,12 +303,16 @@ impl TaskPool {
             .map(|t| t.id.clone())
             .collect();
 
-        // Find all executable tasks — only auto-dispatch tasks that have been
-        // assigned a target_agent (i.e. @ dispatched). Unassigned tasks remain
-        // queued until manually started or assigned.
+        // Find all executable tasks — auto-dispatch tasks that have either been
+        // assigned a target_agent (i.e. @ dispatched to an existing agent) or have
+        // a provider set (i.e. spawn a new agent of that type). Unassigned tasks
+        // remain queued until manually started or assigned.
         let mut candidates: Vec<&Task> = tasks
             .iter()
-            .filter(|t| t.is_executable(&completed_ids) && t.target_agent.is_some())
+            .filter(|t| {
+                t.is_executable(&completed_ids)
+                    && (t.target_agent.is_some() || t.provider.is_some())
+            })
             .collect();
 
         // Sort by priority (P0 first), then by creation time (FIFO)
@@ -423,9 +427,9 @@ mod tests {
     async fn test_priority_ordering() {
         let (pool, _tmp) = make_pool().await;
 
-        let t_p2 = Task::new("Low priority", "P2 task").with_priority(Priority::P2);
-        let t_p0 = Task::new("High priority", "P0 task").with_priority(Priority::P0);
-        let t_p1 = Task::new("Normal priority", "P1 task").with_priority(Priority::P1);
+        let t_p2 = Task::new("Low priority", "P2 task").with_priority(Priority::P2).with_target_agent("agent-a");
+        let t_p0 = Task::new("High priority", "P0 task").with_priority(Priority::P0).with_target_agent("agent-a");
+        let t_p1 = Task::new("Normal priority", "P1 task").with_priority(Priority::P1).with_target_agent("agent-a");
 
         pool.add(t_p2).await.unwrap();
         pool.add(t_p0).await.unwrap();
@@ -440,8 +444,8 @@ mod tests {
     async fn test_fifo_within_priority() {
         let (pool, _tmp) = make_pool().await;
 
-        let t1 = Task::new("First", "First P1 task");
-        let t2 = Task::new("Second", "Second P1 task");
+        let t1 = Task::new("First", "First P1 task").with_target_agent("agent-a");
+        let t2 = Task::new("Second", "Second P1 task").with_target_agent("agent-a");
 
         pool.add(t1).await.unwrap();
         // Slight delay to ensure different timestamps
@@ -456,10 +460,10 @@ mod tests {
     async fn test_dependency_blocking() {
         let (pool, _tmp) = make_pool().await;
 
-        let t1 = Task::new("Parent", "Parent task");
+        let t1 = Task::new("Parent", "Parent task").with_target_agent("agent-a");
         let parent_id = pool.add(t1).await.unwrap();
 
-        let t2 = Task::new("Child", "Child task").with_deps(vec![parent_id.clone()]);
+        let t2 = Task::new("Child", "Child task").with_deps(vec![parent_id.clone()]).with_target_agent("agent-a");
         let child_id = pool.add(t2).await.unwrap();
 
         // Child should be blocked

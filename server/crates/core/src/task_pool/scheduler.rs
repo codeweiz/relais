@@ -6,10 +6,11 @@
 //! to an idle agent session. It also listens for `AgentTurnComplete`
 //! events to transition tasks to Completed or NeedsReview.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tokio::sync::watch;
+use tokio::sync::{watch, RwLock};
 use tracing::{debug, error, info, warn};
 
 use crate::agent::manager::AgentManager;
@@ -71,6 +72,8 @@ pub struct TaskDispatcher {
     pool: Arc<TaskPool>,
     agent_manager: Arc<AgentManager>,
     event_bus: Arc<EventBus>,
+    /// Maps agent session IDs to their currently-processing task ID (for reused-agent dispatch).
+    pending_tasks: Arc<RwLock<HashMap<String, String>>>,
     /// Shutdown signal.
     shutdown_tx: watch::Sender<bool>,
     shutdown_rx: watch::Receiver<bool>,
@@ -90,6 +93,7 @@ impl TaskDispatcher {
             pool,
             agent_manager,
             event_bus,
+            pending_tasks: Arc::new(RwLock::new(HashMap::new())),
             shutdown_tx,
             shutdown_rx,
         }
@@ -106,6 +110,7 @@ impl TaskDispatcher {
         let pool = Arc::clone(&self.pool);
         let agent_manager = Arc::clone(&self.agent_manager);
         let event_bus = Arc::clone(&self.event_bus);
+        let pending_tasks = Arc::clone(&self.pending_tasks);
         let mut shutdown_rx = self.shutdown_rx.clone();
 
         let handle = tokio::spawn(async move {
@@ -127,14 +132,14 @@ impl TaskDispatcher {
                     // --- Periodic polling for pending tasks ---
                     _ = tokio::time::sleep(interval) => {
                         if config.auto_start {
-                            Self::dispatch_tick(&config, &pool, &agent_manager, &event_bus).await;
+                            Self::dispatch_tick(&config, &pool, &agent_manager, &event_bus, &pending_tasks).await;
                         }
                     }
                     // --- Event-driven: agent status changes ---
                     result = control_rx.recv() => {
                         match result {
                             Ok(event) => {
-                                Self::handle_control_event(&config, &pool, &event_bus, &event).await;
+                                Self::handle_control_event(&config, &pool, &agent_manager, &event_bus, &pending_tasks, &event).await;
                             }
                             Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
                                 warn!(skipped = n, "dispatcher lagged on control events");
@@ -168,6 +173,7 @@ impl TaskDispatcher {
         pool: &TaskPool,
         agent_manager: &AgentManager,
         event_bus: &EventBus,
+        pending_tasks: &RwLock<HashMap<String, String>>,
     ) {
         let running = pool.running_count().await;
 
@@ -198,21 +204,55 @@ impl TaskDispatcher {
                 "dispatching task to agent"
             );
 
-            // Determine provider/model from task target or use defaults.
-            let (provider, model) = match &task.target {
-                TaskTarget::Agent { provider, model } => {
-                    let p = if provider.is_empty() {
-                        "claude-code"
+            // Path A: target_agent specified — send to existing agent
+            if let Some(ref target_name) = task.target_agent {
+                let agent_session = agent_manager.find_agent_by_name(target_name);
+                if let Some(agent_sid) = agent_session {
+                    if let Err(e) = pool.update_status(&task.id, TaskStatus::Running).await {
+                        error!(id = %task.id, error = %e, "failed to mark task as running");
+                        continue;
+                    }
+                    if let Err(e) = pool.set_session_id(&task.id, agent_sid.clone()).await {
+                        error!(id = %task.id, error = %e, "failed to set session_id");
+                    }
+                    pending_tasks
+                        .write()
+                        .await
+                        .insert(agent_sid.clone(), task.id.clone());
+                    let prompt = build_task_prompt(&task);
+                    if let Err(e) = agent_manager.send_message(&agent_sid, prompt).await {
+                        error!(id = %task.id, error = %e, "failed to send task to agent");
+                        let _ = pool.update_status(&task.id, TaskStatus::Failed).await;
+                        pending_tasks.write().await.remove(&agent_sid);
                     } else {
-                        provider.as_str()
-                    };
-                    let m = if model.is_empty() { "" } else { model.as_str() };
-                    (p.to_string(), m.to_string())
+                        info!(id = %task.id, agent = %agent_sid, "task dispatched to existing agent");
+                    }
+                    continue;
                 }
-                TaskTarget::Command { .. } => {
-                    // For command tasks, we still route through an agent session
-                    // that can execute the command. Future: direct PTY execution.
-                    ("claude-code".to_string(), String::new())
+                // Agent not found by name — fall through to Path B
+            }
+
+            // Path B: create a new agent session for this task.
+
+            // Determine provider/model: prefer task.provider, then task.target, then default.
+            let (provider, model) = if let Some(ref p) = task.provider {
+                (p.clone(), String::new())
+            } else {
+                match &task.target {
+                    TaskTarget::Agent { provider, model } => {
+                        let p = if provider.is_empty() {
+                            "claude-code"
+                        } else {
+                            provider.as_str()
+                        };
+                        let m = if model.is_empty() { "" } else { model.as_str() };
+                        (p.to_string(), m.to_string())
+                    }
+                    TaskTarget::Command { .. } => {
+                        // For command tasks, we still route through an agent session
+                        // that can execute the command. Future: direct PTY execution.
+                        ("claude-code".to_string(), String::new())
+                    }
                 }
             };
 
@@ -316,25 +356,108 @@ impl TaskDispatcher {
     }
 
     /// Handle a control event — look for agent status changes that indicate
-    /// a task's agent turn has completed (or crashed).
+    /// a task's agent turn has completed (or crashed), and trigger immediate
+    /// dispatch when new tasks are added.
     async fn handle_control_event(
         config: &SchedulerConfig,
         pool: &TaskPool,
+        agent_manager: &AgentManager,
         event_bus: &EventBus,
+        pending_tasks: &RwLock<HashMap<String, String>>,
         event: &ControlEvent,
     ) {
-        if let ControlEvent::AgentStatusChanged { session_id, status } = event {
-            // Only care about task-dispatched sessions (prefixed "task-").
-            if !session_id.starts_with("task-") {
-                return;
+        // Trigger immediate dispatch when a new task is added.
+        if matches!(event, ControlEvent::TaskAdded { .. }) {
+            if config.auto_start {
+                Self::dispatch_tick(config, pool, agent_manager, event_bus, pending_tasks).await;
             }
+            return;
+        }
 
+        if let ControlEvent::AgentStatusChanged { session_id, status } = event {
             match status {
                 AgentStatus::Idle => {
+                    // Check pending_tasks for reused-agent dispatch (Path A).
+                    if let Some(task_id) = pending_tasks.write().await.remove(session_id.as_str()) {
+                        info!(task_id = %task_id, session_id = %session_id, "reused agent completed task");
+                        if config.auto_approve {
+                            let _ = pool.update_status(&task_id, TaskStatus::Completed).await;
+                            let _ = pool
+                                .set_result(
+                                    &task_id,
+                                    TaskResult {
+                                        success: true,
+                                        output: None,
+                                        error: None,
+                                        exit_code: None,
+                                        duration_secs: 0.0,
+                                    },
+                                )
+                                .await;
+                        } else {
+                            let _ = pool.update_status(&task_id, TaskStatus::NeedsReview).await;
+                        }
+                        // Notify source session.
+                        if let Some(task) = pool.get(&task_id).await {
+                            if let Some(ref source) = task.source_session_id {
+                                event_bus.publish_control(ControlEvent::TaskCompleted {
+                                    task_id: task_id.clone(),
+                                    source_session_id: source.clone(),
+                                    target_name: task.target_agent.unwrap_or_default(),
+                                    success: true,
+                                    summary: task.name.clone(),
+                                });
+                            }
+                        }
+                        return;
+                    }
+
+                    // Only care about task-dispatched sessions (prefixed "task-") for Path B.
+                    if !session_id.starts_with("task-") {
+                        return;
+                    }
                     // Agent finished its turn. Transition task based on auto_approve.
                     Self::handle_agent_idle(config, pool, event_bus, session_id).await;
                 }
                 AgentStatus::Crashed { error, .. } => {
+                    // Check pending_tasks for reused-agent dispatch (Path A).
+                    if let Some(task_id) = pending_tasks.write().await.remove(session_id.as_str()) {
+                        warn!(task_id = %task_id, session_id = %session_id, error = %error, "reused agent crashed during task");
+                        let _ = pool.update_status(&task_id, TaskStatus::Failed).await;
+                        let _ = pool
+                            .set_result(
+                                &task_id,
+                                TaskResult {
+                                    success: false,
+                                    output: None,
+                                    error: Some(format!("Agent crashed: {}", error)),
+                                    exit_code: None,
+                                    duration_secs: 0.0,
+                                },
+                            )
+                            .await;
+                        // Notify source session.
+                        if let Some(task) = pool.get(&task_id).await {
+                            if let Some(ref source) = task.source_session_id {
+                                event_bus.publish_control(ControlEvent::TaskCompleted {
+                                    task_id: task_id.clone(),
+                                    source_session_id: source.clone(),
+                                    target_name: task.target_agent.unwrap_or_default(),
+                                    success: false,
+                                    summary: format!("Agent crashed: {}", error)
+                                        .chars()
+                                        .take(200)
+                                        .collect(),
+                                });
+                            }
+                        }
+                        return;
+                    }
+
+                    // Only care about task-dispatched sessions (prefixed "task-") for Path B.
+                    if !session_id.starts_with("task-") {
+                        return;
+                    }
                     // Agent crashed — fail the task.
                     Self::handle_agent_crash(pool, event_bus, session_id, error).await;
                 }

@@ -338,6 +338,14 @@ impl AgentManager {
             .unwrap_or_default()
     }
 
+    /// Find a running agent's session ID by name.
+    pub fn find_agent_by_name(&self, name: &str) -> Option<String> {
+        self.agents
+            .iter()
+            .find(|entry| entry.value().name == name)
+            .map(|entry| entry.key().clone())
+    }
+
     /// Check if an agent session exists.
     pub fn has_agent(&self, session_id: &str) -> bool {
         self.agents.contains_key(session_id)
