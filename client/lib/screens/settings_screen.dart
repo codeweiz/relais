@@ -57,176 +57,191 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final name = nameCtrl.text.trim();
       final desc = descCtrl.text.trim();
       if (name.isNotEmpty) {
-        await ref.read(settingsProvider.notifier).addBuiltinSlashCommand(name, desc);
+        await ref
+            .read(settingsProvider.notifier)
+            .addBuiltinSlashCommand(name, desc);
       }
     }
     nameCtrl.dispose();
     descCtrl.dispose();
   }
 
+  Widget _sectionHeader(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+              letterSpacing: 0.8,
+            ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
+    final theme = Theme.of(context);
+    final cmdCount = settings.builtinSlashCommands.length;
 
     return Scaffold(
       appBar: AppBar(title: Text(S.settings)),
       body: ListView(
-        padding: const EdgeInsets.all(16),
         children: [
-          // ── Appearance ─────────────────────────────────
-          Text(S.appearance, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          Card.filled(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(S.theme, style: Theme.of(context).textTheme.bodyLarge),
-                  const SizedBox(height: 8),
-                  SegmentedButton<ThemeMode>(
-                    segments: [
-                      ButtonSegment(value: ThemeMode.system, label: Text(S.system), icon: const Icon(Icons.brightness_auto)),
-                      ButtonSegment(value: ThemeMode.light, label: Text(S.light), icon: const Icon(Icons.light_mode)),
-                      ButtonSegment(value: ThemeMode.dark, label: Text(S.dark), icon: const Icon(Icons.dark_mode)),
-                    ],
-                    selected: {settings.themeMode},
-                    onSelectionChanged: (s) => ref.read(settingsProvider.notifier).setThemeMode(s.first),
-                  ),
-                ],
-              ),
+          // ── Appearance ─────────────────────────────────────────────────────
+          _sectionHeader(context, S.appearance),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text(S.theme, style: theme.textTheme.bodySmall),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: SegmentedButton<ThemeMode>(
+              segments: [
+                ButtonSegment(
+                    value: ThemeMode.system,
+                    label: Text(S.system),
+                    icon: const Icon(Icons.brightness_auto)),
+                ButtonSegment(
+                    value: ThemeMode.light,
+                    label: Text(S.light),
+                    icon: const Icon(Icons.light_mode)),
+                ButtonSegment(
+                    value: ThemeMode.dark,
+                    label: Text(S.dark),
+                    icon: const Icon(Icons.dark_mode)),
+              ],
+              selected: {settings.themeMode},
+              onSelectionChanged: (s) =>
+                  ref.read(settingsProvider.notifier).setThemeMode(s.first),
             ),
           ),
 
-          // ── Language ──────────────────────────────────
-          const SizedBox(height: 24),
-          Text(S.language, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          Card.filled(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(S.language, style: Theme.of(context).textTheme.bodyLarge),
-                  const SizedBox(height: 8),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'zh', label: Text('简体中文')),
-                      ButtonSegment(value: 'en', label: Text('English')),
-                    ],
-                    selected: {settings.locale},
-                    onSelectionChanged: (s) => ref.read(settingsProvider.notifier).setLocale(s.first),
-                  ),
-                ],
-              ),
+          // ── Language ───────────────────────────────────────────────────────
+          _sectionHeader(context, S.language),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'zh', label: Text('简体中文')),
+                ButtonSegment(value: 'en', label: Text('English')),
+              ],
+              selected: {settings.locale},
+              onSelectionChanged: (s) =>
+                  ref.read(settingsProvider.notifier).setLocale(s.first),
             ),
           ),
 
-          // ── Terminal ───────────────────────────────────
-          const SizedBox(height: 24),
-          Text(S.terminal, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          Card.filled(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(S.fontSize, style: Theme.of(context).textTheme.bodyLarge),
-                      Text('${settings.fontSize.round()}px', style: Theme.of(context).textTheme.bodyMedium),
-                    ],
-                  ),
-                  Slider(
-                    value: settings.fontSize,
-                    min: 10,
-                    max: 24,
-                    divisions: 14,
-                    onChanged: (v) => ref.read(settingsProvider.notifier).setFontSize(v),
-                  ),
-                  const Divider(),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(S.cursorBlink),
-                    value: settings.terminalCursorBlink,
-                    onChanged: (v) => ref.read(settingsProvider.notifier).setTerminalCursorBlink(v),
-                  ),
-                ],
-              ),
+          // ── Terminal ───────────────────────────────────────────────────────
+          _sectionHeader(context, S.terminal),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(S.fontSize, style: theme.textTheme.bodyMedium),
+                Text('${settings.fontSize.round()}px',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    )),
+              ],
+            ),
+          ),
+          Slider(
+            value: settings.fontSize,
+            min: 10,
+            max: 24,
+            divisions: 14,
+            onChanged: (v) =>
+                ref.read(settingsProvider.notifier).setFontSize(v),
+          ),
+          const Divider(height: 1),
+          SwitchListTile(
+            title: Text(S.cursorBlink),
+            value: settings.terminalCursorBlink,
+            onChanged: (v) => ref
+                .read(settingsProvider.notifier)
+                .setTerminalCursorBlink(v),
+          ),
+
+          // ── Agent ──────────────────────────────────────────────────────────
+          _sectionHeader(context, S.agent),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Text(S.defaultProvider, style: theme.textTheme.bodySmall),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'claude-code', label: Text('Claude')),
+                ButtonSegment(value: 'gemini-cli', label: Text('Gemini')),
+                ButtonSegment(value: 'opencode', label: Text('OpenCode')),
+              ],
+              selected: {settings.defaultAgentProvider},
+              onSelectionChanged: (s) => ref
+                  .read(settingsProvider.notifier)
+                  .setDefaultAgentProvider(s.first),
             ),
           ),
 
-          // ── Agent ──────────────────────────────────────
-          const SizedBox(height: 24),
-          Text(S.agent, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          Card.filled(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(S.defaultProvider, style: Theme.of(context).textTheme.bodyLarge),
-                  const SizedBox(height: 8),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'claude-code', label: Text('Claude')),
-                      ButtonSegment(value: 'gemini-cli', label: Text('Gemini')),
-                      ButtonSegment(value: 'opencode', label: Text('OpenCode')),
-                    ],
-                    selected: {settings.defaultAgentProvider},
-                    onSelectionChanged: (s) => ref.read(settingsProvider.notifier).setDefaultAgentProvider(s.first),
-                  ),
-                ],
+          // ── Built-in Slash Commands ────────────────────────────────────────
+          const Divider(height: 1),
+          ExpansionTile(
+            title: Text(S.builtinSlashCommands),
+            subtitle: Text(
+              cmdCount == 0
+                  ? S.noCommandsAvailable
+                  : '$cmdCount ${S.tasks.toLowerCase()}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.outline,
               ),
             ),
-          ),
-
-          // ── Built-in Slash Commands ────────────────────
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(S.builtinSlashCommands, style: Theme.of(context).textTheme.titleMedium),
-              TextButton.icon(
-                onPressed: _showAddCommandDialog,
-                icon: const Icon(Icons.add, size: 18),
-                label: Text(S.addCommand),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Card.filled(
-            child: settings.builtinSlashCommands.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      S.noCommandsAvailable,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.outline,
-                          ),
+            initiallyExpanded: false,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.add, size: 20),
+                  tooltip: S.addCommand,
+                  onPressed: _showAddCommandDialog,
+                  visualDensity: VisualDensity.compact,
+                ),
+                const Icon(Icons.expand_more),
+              ],
+            ),
+            children: settings.builtinSlashCommands.isEmpty
+                ? [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      child: Text(
+                        S.noCommandsAvailable,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
+                      ),
                     ),
-                  )
-                : ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: settings.builtinSlashCommands.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
+                  ]
+                : List.generate(
+                    settings.builtinSlashCommands.length,
+                    (index) {
                       final cmd = settings.builtinSlashCommands[index];
                       return Dismissible(
-                        key: ValueKey('builtin_cmd_${index}_${cmd['name']}'),
+                        key: ValueKey(
+                            'builtin_cmd_${index}_${cmd['name']}'),
                         direction: DismissDirection.endToStart,
                         background: Container(
                           alignment: Alignment.centerRight,
                           padding: const EdgeInsets.only(right: 16),
-                          color: Theme.of(context).colorScheme.errorContainer,
+                          color: theme.colorScheme.errorContainer,
                           child: Icon(
                             Icons.delete_outline,
-                            color: Theme.of(context).colorScheme.onErrorContainer,
+                            color: theme.colorScheme.onErrorContainer,
                           ),
                         ),
                         onDismissed: (_) {
@@ -235,101 +250,83 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               .removeBuiltinSlashCommand(index);
                         },
                         child: ListTile(
+                          dense: true,
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 4),
+                              horizontal: 16, vertical: 0),
                           title: Text(
                             '/${cmd['name']}',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.primary,
+                              fontSize: 13,
+                              color: theme.colorScheme.primary,
                             ),
                           ),
                           subtitle: cmd['description']!.isNotEmpty
-                              ? Text(cmd['description']!)
+                              ? Text(cmd['description']!,
+                                  style:
+                                      theme.textTheme.bodySmall)
                               : null,
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            color: Theme.of(context).colorScheme.error,
-                            onPressed: () {
-                              ref
-                                  .read(settingsProvider.notifier)
-                                  .removeBuiltinSlashCommand(index);
-                            },
-                          ),
                         ),
                       );
                     },
                   ),
           ),
 
-          // ── Data ───────────────────────────────────────
-          const SizedBox(height: 24),
-          Text(S.dataSection, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          Card.filled(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.delete_outline),
-                    title: Text(S.clearSavedServers),
-                    subtitle: Text(S.clearSavedServersDesc),
-                    onTap: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: Text(S.clearConfirm),
-                          content: Text(S.clearConfirmDesc),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(S.cancel)),
-                            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(S.clear)),
-                          ],
-                        ),
-                      );
-                      if (confirmed == true) {
-                        await ref.read(settingsProvider.notifier).clearSavedServers();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(S.cleared)),
-                          );
-                        }
-                      }
-                    },
-                  ),
-                ],
-              ),
-            ),
+          // ── Data ───────────────────────────────────────────────────────────
+          _sectionHeader(context, S.dataSection),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.delete_outline),
+            title: Text(S.clearSavedServers),
+            subtitle: Text(S.clearSavedServersDesc,
+                style: theme.textTheme.bodySmall),
+            onTap: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: Text(S.clearConfirm),
+                  content: Text(S.clearConfirmDesc),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: Text(S.cancel)),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: Text(S.clear)),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                await ref
+                    .read(settingsProvider.notifier)
+                    .clearSavedServers();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(S.cleared)),
+                  );
+                }
+              }
+            },
           ),
 
-          // ── About ──────────────────────────────────────
-          const SizedBox(height: 24),
-          Text(S.about, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          Card.filled(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Relais'),
-                    subtitle: const Text('v1.0.0'),
-                    trailing: Icon(Icons.terminal_rounded, color: Theme.of(context).colorScheme.primary),
-                  ),
-                  Text(
-                    S.aboutDesc,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+          // ── About ──────────────────────────────────────────────────────────
+          _sectionHeader(context, S.about),
+          const Divider(height: 1),
+          ListTile(
+            leading:
+                Icon(Icons.terminal_rounded, color: theme.colorScheme.primary),
+            title: const Text('Relais'),
+            subtitle: const Text('v1.0.0'),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+            child: Text(
+              S.aboutDesc,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
           ),
-          const SizedBox(height: 32),
         ],
       ),
     );

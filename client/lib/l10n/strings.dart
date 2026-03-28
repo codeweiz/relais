@@ -74,6 +74,8 @@ class S {
   static String get priority => _t('优先级', 'Priority');
   static String get dispatch => _t('派发', 'Dispatch');
   static String get selectAgent => _t('选择 Agent', 'Select Agent');
+  static String get sessions => _t('会话', 'Sessions');
+  static String get tasks => _t('任务', 'Tasks');
   static String taskCompleted(String name, String task) =>
       _t('$name 完成了任务：$task', '$name completed: $task');
   static String taskFailed(String name, String task) =>
