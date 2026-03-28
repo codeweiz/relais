@@ -177,8 +177,22 @@ impl ClaudeAcpBridge {
                 } => {
                     return Ok((is_error, error_text));
                 }
-                SdkEvent::SystemInit { .. } => {
-                    // informational, no ACP notification needed
+                SdkEvent::SystemInit {
+                    slash_commands, ..
+                } => {
+                    if !slash_commands.is_empty() {
+                        let commands: Vec<acp::AvailableCommand> = slash_commands
+                            .iter()
+                            .map(|name| acp::AvailableCommand::new(name.clone(), ""))
+                            .collect();
+                        let notif = acp::SessionNotification::new(
+                            session_id.to_string(),
+                            acp::SessionUpdate::AvailableCommandsUpdate(
+                                acp::AvailableCommandsUpdate::new(commands),
+                            ),
+                        );
+                        let _ = self.notif_tx.send(notif).await;
+                    }
                 }
                 SdkEvent::ControlHandled { .. } => {
                     // informational, no ACP notification needed

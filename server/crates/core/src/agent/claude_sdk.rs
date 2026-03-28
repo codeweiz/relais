@@ -53,7 +53,10 @@ pub enum SdkEvent {
         error_text: Option<String>,
     },
     /// System init message received.
-    SystemInit { session_id: Option<String> },
+    SystemInit {
+        session_id: Option<String>,
+        slash_commands: Vec<String>,
+    },
     /// Control request that was auto-handled (logged for debugging).
     ControlHandled { subtype: String },
 }
@@ -214,8 +217,20 @@ impl ClaudeSdk {
                         if let Some(ref s) = sid {
                             *session_id_for_reader.lock().await = Some(s.clone());
                         }
+                        let slash_commands: Vec<String> = msg
+                            .get("slash_commands")
+                            .and_then(|v| v.as_array())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
                         let _ = event_tx
-                            .send(SdkEvent::SystemInit { session_id: sid })
+                            .send(SdkEvent::SystemInit {
+                                session_id: sid,
+                                slash_commands,
+                            })
                             .await;
                     }
 
