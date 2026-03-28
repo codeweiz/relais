@@ -20,15 +20,21 @@ pub struct PtyManager {
     sessions: DashMap<String, Arc<PtySession>>,
     event_bus: Arc<EventBus>,
     config: Arc<Config>,
+    session_store: Arc<crate::session::store::SessionStore>,
 }
 
 impl PtyManager {
     /// Create a new PTY manager.
-    pub fn new(event_bus: Arc<EventBus>, config: Arc<Config>) -> Self {
+    pub fn new(
+        event_bus: Arc<EventBus>,
+        config: Arc<Config>,
+        session_store: Arc<crate::session::store::SessionStore>,
+    ) -> Self {
         Self {
             sessions: DashMap::new(),
             event_bus,
             config,
+            session_store,
         }
     }
 
@@ -52,6 +58,29 @@ impl PtyManager {
         self.sessions.insert(session_id.clone(), session);
 
         info!(session_id = %session_id, name = %name, "created PTY session");
+
+        // Persist session metadata to disk.
+        let now = chrono::Utc::now();
+        let meta = crate::session::types::SessionMeta {
+            id: session_id.clone(),
+            name: name.to_string(),
+            session_type: crate::session::types::SessionType::Terminal,
+            agent: None,
+            shell: Some(self.config.server.shell.clone()),
+            cwd: cwd
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| ".".to_string()),
+            created_at: now,
+            last_active: now,
+            last_seq: 0,
+            status: crate::session::types::SessionStatus::Running,
+            parent_id: None,
+            tags: Vec::new(),
+            acp_session_id: None,
+        };
+        if let Err(e) = self.session_store.create(&meta) {
+            tracing::warn!(session_id = %session_id, error = %e, "failed to persist terminal session metadata");
+        }
 
         self.event_bus
             .publish_control(ControlEvent::SessionCreated {

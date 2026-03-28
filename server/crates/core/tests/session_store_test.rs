@@ -19,6 +19,7 @@ fn make_meta(id: &str) -> SessionMeta {
         status: SessionStatus::Running,
         parent_id: None,
         tags: vec![],
+        acp_session_id: None,
     }
 }
 

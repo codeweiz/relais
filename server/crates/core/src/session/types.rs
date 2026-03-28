@@ -21,6 +21,9 @@ pub struct SessionMeta {
     pub parent_id: Option<SessionId>,
     #[serde(default)]
     pub tags: Vec<String>,
+    /// CLI session ID for --resume support (e.g. Claude Code session ID).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acp_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

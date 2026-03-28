@@ -56,15 +56,22 @@ pub struct AgentManager {
     event_bus: Arc<EventBus>,
     /// Registry tracking real-time activity status of all agents.
     status_registry: Arc<AgentStatusRegistry>,
+    /// Persistent session store for metadata and event history.
+    session_store: Arc<crate::session::store::SessionStore>,
 }
 
 impl AgentManager {
     /// Create a new agent manager.
-    pub fn new(event_bus: Arc<EventBus>, status_registry: Arc<AgentStatusRegistry>) -> Self {
+    pub fn new(
+        event_bus: Arc<EventBus>,
+        status_registry: Arc<AgentStatusRegistry>,
+        session_store: Arc<crate::session::store::SessionStore>,
+    ) -> Self {
         Self {
             agents: DashMap::new(),
             event_bus,
             status_registry,
+            session_store,
         }
     }
 
@@ -99,6 +106,8 @@ impl AgentManager {
         let event_history: Arc<Mutex<Vec<AgentEvent>>> = Arc::new(Mutex::new(Vec::new()));
         self.start_event_router(session_id.clone(), &backend, event_history.clone());
 
+        let cwd_str = cwd.display().to_string();
+
         // Attempt to start the backend. On failure, register in crashed state.
         match backend.start(&cwd, None).await {
             Ok(()) => {
@@ -116,7 +125,36 @@ impl AgentManager {
                 self.agents.insert(session_id.clone(), managed);
                 self.status_registry.register(&session_id, name, provider);
 
-                // Publish session creation event
+                // Persist session metadata to disk for restore on restart.
+                let meta = crate::session::types::SessionMeta {
+                    id: session_id.clone(),
+                    name: name.to_string(),
+                    session_type: crate::session::types::SessionType::Agent,
+                    agent: Some(crate::session::types::AgentInfo {
+                        provider: provider.to_string(),
+                        model: String::new(),
+                    }),
+                    shell: None,
+                    cwd: cwd_str.clone(),
+                    created_at,
+                    last_active: created_at,
+                    last_seq: 0,
+                    status: crate::session::types::SessionStatus::Running,
+                    parent_id: None,
+                    tags: Vec::new(),
+                    acp_session_id: None,
+                };
+                if let Err(e) = self.session_store.create(&meta) {
+                    warn!(session_id = %session_id, error = %e, "failed to persist session metadata");
+                }
+
+                // Publish session creation + ready events so clients discover
+                // the new agent immediately.
+                self.event_bus
+                    .publish_control(ControlEvent::SessionCreated {
+                        session_id: session_id.clone(),
+                        session_type: crate::events::SessionType::Agent,
+                    });
                 self.event_bus
                     .publish_control(ControlEvent::AgentStatusChanged {
                         session_id,
@@ -304,6 +342,7 @@ impl AgentManager {
         let event_bus = self.event_bus.clone();
         let status_registry = self.status_registry.clone();
         let event_bus_for_status = self.event_bus.clone();
+        let session_store = self.session_store.clone();
         let sid = session_id.clone();
         let mut seq: u64 = 1;
 
@@ -333,14 +372,46 @@ impl AgentManager {
                         let data_event = agent_event_to_data_event(seq, &event);
                         event_bus.publish_data(&sid, data_event).await;
 
+                        // Persist event to disk for session history recovery.
+                        if !is_available_commands {
+                            let evt_type = match &event {
+                                AgentEvent::Text(_) => "text",
+                                AgentEvent::Thinking(_) => "thinking",
+                                AgentEvent::ToolUse { .. } => "tool_use",
+                                AgentEvent::ToolResult { .. } => "tool_result",
+                                AgentEvent::TurnComplete { .. } => "turn_complete",
+                                AgentEvent::Error(_) => "error",
+                                AgentEvent::UserMessage { .. } => "user_message",
+                                AgentEvent::Progress(_) => "progress",
+                                AgentEvent::AvailableCommands(_) => "available_commands",
+                            };
+                            let data = match &event {
+                                AgentEvent::Text(c) => serde_json::json!({"content": c}),
+                                AgentEvent::Thinking(c) => serde_json::json!({"content": c}),
+                                AgentEvent::ToolUse { id, name, input } => serde_json::json!({"id": id, "name": name, "input": input}),
+                                AgentEvent::ToolResult { id, output, is_error } => serde_json::json!({"id": id, "output": output, "is_error": is_error}),
+                                AgentEvent::TurnComplete { cost_usd, .. } => serde_json::json!({"cost_usd": cost_usd}),
+                                AgentEvent::Error(msg) => serde_json::json!({"message": msg}),
+                                AgentEvent::UserMessage { text, source } => serde_json::json!({"text": text, "source": source}),
+                                AgentEvent::Progress(msg) => serde_json::json!({"message": msg}),
+                                AgentEvent::AvailableCommands(_) => serde_json::Value::Null,
+                            };
+                            let session_event = crate::session::types::SessionEvent {
+                                seq,
+                                event_type: evt_type.to_string(),
+                                ts: chrono::Utc::now().timestamp_millis(),
+                                data,
+                            };
+                            if let Err(e) = session_store.append_event(&sid, &session_event) {
+                                warn!(session_id = %sid, error = %e, "failed to persist agent event");
+                            }
+                        }
+
                         // Update status registry and broadcast activity change
                         let (activity_status, activity_text, event_cost) = match &event {
                             AgentEvent::Text(content) => {
-                                // Skip tiny streaming chunks to avoid noisy overwrites;
-                                // only surface substantial text (>= 10 chars).
                                 let summary: String = content.chars().take(100).collect();
-                                let text = if summary.len() >= 10 { summary } else { String::new() };
-                                (AgentActivity::Working, text, None)
+                                (AgentActivity::Working, summary, None)
                             }
                             AgentEvent::Thinking(_) => {
                                 (AgentActivity::Thinking, "Thinking...".to_string(), None)
@@ -366,22 +437,20 @@ impl AgentManager {
                             }
                         };
 
-                        if !activity_text.is_empty() || matches!(activity_status, AgentActivity::Idle) {
-                            let changed = status_registry.update(
-                                &sid,
-                                activity_status.clone(),
-                                &activity_text,
-                                event_cost,
+                        let changed = status_registry.update(
+                            &sid,
+                            activity_status.clone(),
+                            &activity_text,
+                            event_cost,
+                        );
+                        if changed {
+                            event_bus_for_status.publish_control(
+                                ControlEvent::AgentActivityChanged {
+                                    session_id: sid.clone(),
+                                    status: activity_status.to_string(),
+                                    activity: activity_text,
+                                },
                             );
-                            if changed {
-                                event_bus_for_status.publish_control(
-                                    ControlEvent::AgentActivityChanged {
-                                        session_id: sid.clone(),
-                                        status: activity_status.to_string(),
-                                        activity: activity_text,
-                                    },
-                                );
-                            }
                         }
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
