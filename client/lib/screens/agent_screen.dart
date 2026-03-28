@@ -51,6 +51,10 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       );
       _session!.addListener(_onUpdate);
     }
+    // Scroll to bottom after the first frame so existing history is visible.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
   }
 
   void _onUpdate() {

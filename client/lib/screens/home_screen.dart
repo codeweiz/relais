@@ -6,15 +6,19 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../models/agent_status.dart';
 import '../models/session.dart';
+import '../models/slash_command.dart';
 import '../models/task.dart';
 import '../providers/agent_provider.dart';
 import '../providers/agent_status_provider.dart';
 import '../providers/server_provider.dart';
 import '../providers/session_provider.dart';
+import '../providers/settings_provider.dart';
 import '../providers/task_provider.dart';
+import '../widgets/agent_picker_menu.dart';
 import '../widgets/dispatch_dialog.dart';
 import '../widgets/office_painter.dart';
 import '../widgets/session_card.dart';
+import '../widgets/slash_command_menu.dart';
 import '../l10n/strings.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -144,23 +148,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   void _showQuickMessage(AgentStatusInfo agent) {
+    final server = ref.read(serverProvider).server;
+    if (server == null) return;
+    final agentSession = ref.read(agentSessionManagerProvider).getOrCreate(
+      sessionId: agent.sessionId,
+      baseUrl: server.url,
+      token: server.token,
+    );
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => _QuickMessageSheet(
         agentName: agent.name,
         sessionId: agent.sessionId,
-        onSend: (text) {
-          final server = ref.read(serverProvider).server;
-          if (server == null) return;
-          final session = ref.read(agentSessionManagerProvider).getOrCreate(
-            sessionId: agent.sessionId,
-            baseUrl: server.url,
-            token: server.token,
-          );
-          session.sendMessage(text);
-          Navigator.of(ctx).pop();
-        },
+        agentSession: agentSession,
+        onSent: () => Navigator.of(ctx).pop(),
       ),
     );
   }
@@ -551,41 +553,194 @@ class _PanelTab extends StatelessWidget {
 
 // ── Quick message bottom sheet ────────────────────────────────────────────────
 
-class _QuickMessageSheet extends StatefulWidget {
+class _QuickMessageSheet extends ConsumerStatefulWidget {
   final String agentName;
   final String sessionId;
-  final ValueChanged<String> onSend;
+  final AgentSession agentSession;
+  final VoidCallback onSent;
 
   const _QuickMessageSheet({
     required this.agentName,
     required this.sessionId,
-    required this.onSend,
+    required this.agentSession,
+    required this.onSent,
   });
 
   @override
-  State<_QuickMessageSheet> createState() => _QuickMessageSheetState();
+  ConsumerState<_QuickMessageSheet> createState() => _QuickMessageSheetState();
 }
 
-class _QuickMessageSheetState extends State<_QuickMessageSheet> {
+class _QuickMessageSheetState extends ConsumerState<_QuickMessageSheet> {
   final _inputController = TextEditingController();
+  final _inputFocusNode = FocusNode();
   final _speech = stt.SpeechToText();
   bool _isListening = false;
+
+  final _layerLink = LayerLink();
+  final _menuController = SlashCommandMenuController();
+  bool _showingMenu = false;
+  final _agentPickerController = AgentPickerController();
+  bool _showingAgentPicker = false;
 
   @override
   void dispose() {
     _speech.stop();
     _inputController.dispose();
+    _inputFocusNode.dispose();
+    _menuController.dismiss();
+    _agentPickerController.dismiss();
     super.dispose();
   }
 
+  void _onInputChanged(String text) {
+    // Slash command detection
+    if (text.startsWith('/') && !text.contains(' ')) {
+      final filter = text.substring(1);
+      final dynamic = widget.agentSession.availableCommands ?? [];
+      final builtins = ref.read(settingsProvider).builtinSlashCommands
+          .map((m) => SlashCommand(name: m['name']!, description: m['description']!))
+          .toList();
+      final dynamicNames = dynamic.map((c) => c.name).toSet();
+      final merged = [...dynamic, ...builtins.where((c) => !dynamicNames.contains(c.name))];
+
+      if (!_showingMenu) {
+        _showingMenu = true;
+        _menuController.show(
+          context: context,
+          layerLink: _layerLink,
+          commands: merged,
+          filter: filter,
+          onSelect: _onCommandSelected,
+          onDismiss: () => _showingMenu = false,
+        );
+      } else {
+        _menuController.updateFilter(
+          context: context,
+          layerLink: _layerLink,
+          commands: merged,
+          filter: filter,
+          onSelect: _onCommandSelected,
+          onDismiss: () => _showingMenu = false,
+        );
+      }
+    } else {
+      _dismissMenu();
+    }
+
+    // @ agent picker detection
+    if (text.startsWith('@') && !text.contains(' ')) {
+      final agents = ref.read(agentStatusProvider);
+      final agentList = agents.values
+          .where((a) => a.sessionId != widget.sessionId)
+          .toList();
+      if (agentList.isNotEmpty && !_showingAgentPicker) {
+        _showingAgentPicker = true;
+        _agentPickerController.show(
+          context: context,
+          layerLink: _layerLink,
+          agents: agentList,
+          onSelect: _onAgentSelected,
+          onDismiss: () => _showingAgentPicker = false,
+        );
+      }
+    } else if (_showingAgentPicker) {
+      _agentPickerController.dismiss();
+      _showingAgentPicker = false;
+    }
+  }
+
+  void _onCommandSelected(SlashCommand cmd) {
+    _inputController.text = '/${cmd.name} ';
+    _inputController.selection = TextSelection.collapsed(
+      offset: _inputController.text.length,
+    );
+    _showingMenu = false;
+    _inputFocusNode.requestFocus();
+  }
+
+  void _dismissMenu() {
+    if (_showingMenu) {
+      _menuController.dismiss();
+      _showingMenu = false;
+    }
+  }
+
+  void _onAgentSelected(AgentStatusInfo agent) {
+    _inputController.text = '@${agent.name} ';
+    _inputController.selection = TextSelection.collapsed(
+      offset: _inputController.text.length,
+    );
+    _showingAgentPicker = false;
+    _inputFocusNode.requestFocus();
+  }
+
+  Future<void> _dispatchTask(String text) async {
+    final spaceIndex = text.indexOf(' ');
+    if (spaceIndex < 0) return;
+    final targetName = text.substring(1, spaceIndex);
+    final description = text.substring(spaceIndex + 1).trim();
+    if (description.isEmpty) return;
+
+    final agents = ref.read(agentStatusProvider);
+    final targetExists = agents.values.any((a) => a.name == targetName);
+    if (!targetExists) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.agentNotFound)),
+        );
+      }
+      return;
+    }
+
+    await ref.read(taskProvider.notifier).createTask(
+      title: description.length > 50
+          ? '${description.substring(0, 50)}...'
+          : description,
+      prompt: description,
+      targetAgent: targetName,
+      sourceSessionId: widget.sessionId,
+    );
+  }
+
+  void _showDispatchDialog() {
+    final agents = ref.read(agentStatusProvider);
+    showDialog(
+      context: context,
+      builder: (_) => DispatchDialog(
+        agents: agents.values.toList(),
+        onDispatch: (targetAgent, title, prompt, priority) {
+          ref.read(taskProvider.notifier).createTask(
+            title: title,
+            prompt: prompt.isEmpty ? title : prompt,
+            priority: priority,
+            targetAgent: targetAgent,
+            sourceSessionId: widget.sessionId,
+          );
+        },
+      ),
+    );
+  }
+
   void _send() {
+    _dismissMenu();
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
     if (_isListening) {
       _speech.cancel();
       _isListening = false;
     }
-    widget.onSend(text);
+
+    // @ dispatch — create task instead of sending to current agent
+    if (text.startsWith('@') && text.contains(' ')) {
+      _dispatchTask(text);
+      _inputController.value = TextEditingValue.empty;
+      widget.onSent();
+      return;
+    }
+
+    widget.agentSession.sendMessage(text);
+    _inputController.value = TextEditingValue.empty;
+    widget.onSent();
   }
 
   Future<void> _toggleVoice() async {
@@ -647,19 +802,33 @@ class _QuickMessageSheetState extends State<_QuickMessageSheet> {
             child: SafeArea(
               child: Row(
                 children: [
+                  IconButton(
+                    onPressed: _showDispatchDialog,
+                    icon: const Text('@',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        )),
+                    tooltip: S.dispatchTo,
+                  ),
                   Expanded(
-                    child: TextField(
-                      controller: _inputController,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        hintText: S.sendMessage,
-                        border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        isDense: true,
+                    child: CompositedTransformTarget(
+                      link: _layerLink,
+                      child: TextField(
+                        controller: _inputController,
+                        focusNode: _inputFocusNode,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: S.sendMessage,
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          isDense: true,
+                        ),
+                        onChanged: _onInputChanged,
+                        onSubmitted: (_) => _send(),
+                        textInputAction: TextInputAction.send,
                       ),
-                      onSubmitted: (_) => _send(),
-                      textInputAction: TextInputAction.send,
                     ),
                   ),
                   const SizedBox(width: 4),
