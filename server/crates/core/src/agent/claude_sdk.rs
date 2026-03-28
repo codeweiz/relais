@@ -52,10 +52,11 @@ pub enum SdkEvent {
         is_error: bool,
         error_text: Option<String>,
     },
-    /// System init message received.
+    /// System init message received — carries available slash commands with descriptions.
     SystemInit {
         session_id: Option<String>,
-        slash_commands: Vec<String>,
+        /// Each entry is `(name, description)`.
+        slash_commands: Vec<(String, String)>,
     },
     /// Control request that was auto-handled (logged for debugging).
     ControlHandled { subtype: String },
@@ -210,6 +211,8 @@ impl ClaudeSdk {
                     }
 
                     "system" => {
+                        // Capture session_id from hook messages; commands arrive in
+                        // control_response so slash_commands is always empty here.
                         let sid = msg
                             .get("session_id")
                             .and_then(|v| v.as_str())
@@ -217,24 +220,56 @@ impl ClaudeSdk {
                         if let Some(ref s) = sid {
                             *session_id_for_reader.lock().await = Some(s.clone());
                         }
-                        let slash_commands: Vec<String> = msg
-                            .get("slash_commands")
-                            .and_then(|v| v.as_array())
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                    .collect()
-                            })
-                            .unwrap_or_default();
+                        // Emit an empty SystemInit so the bridge sees session_id early.
                         let _ = event_tx
                             .send(SdkEvent::SystemInit {
                                 session_id: sid,
-                                slash_commands,
+                                slash_commands: vec![],
                             })
                             .await;
                     }
 
-                    // control_response, user — internal, no event needed
+                    // control_response: parse the initialize response to extract slash commands
+                    // (Claude returns commands in `response.response.commands` for req_init_1)
+                    "control_response" => {
+                        let request_id = msg
+                            .pointer("/response/request_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        if request_id == "req_init_1" {
+                            let slash_commands: Vec<(String, String)> = msg
+                                .pointer("/response/response/commands")
+                                .and_then(|v| v.as_array())
+                                .map(|arr| {
+                                    arr.iter()
+                                        .filter_map(|cmd| {
+                                            let name = cmd
+                                                .get("name")
+                                                .and_then(|n| n.as_str())
+                                                .map(|s| s.to_string())?;
+                                            let desc = cmd
+                                                .get("description")
+                                                .and_then(|d| d.as_str())
+                                                .unwrap_or("")
+                                                .to_string();
+                                            Some((name, desc))
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default();
+                            if !slash_commands.is_empty() {
+                                let sid = session_id_for_reader.lock().await.clone();
+                                let _ = event_tx
+                                    .send(SdkEvent::SystemInit {
+                                        session_id: sid,
+                                        slash_commands,
+                                    })
+                                    .await;
+                            }
+                        }
+                    }
+
+                    // user — internal, no event needed
                     _ => {}
                 }
             }

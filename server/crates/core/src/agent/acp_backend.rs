@@ -377,6 +377,15 @@ impl agent_client_protocol::Client for SharedAcpClientHandler {
     ) -> agent_client_protocol::Result<()> {
         use agent_client_protocol::{ContentBlock, SessionUpdate};
 
+        let variant_name = match &args.update {
+            SessionUpdate::AgentMessageChunk(_) => "AgentMessageChunk",
+            SessionUpdate::AgentThoughtChunk(_) => "AgentThoughtChunk",
+            SessionUpdate::ToolCallUpdate(_) => "ToolCallUpdate",
+            SessionUpdate::AvailableCommandsUpdate(_) => "AvailableCommandsUpdate",
+            _ => "Other",
+        };
+        tracing::debug!("[acp] session_notification variant={}", variant_name);
+
         match args.update {
             SessionUpdate::AgentMessageChunk(chunk) => {
                 if let ContentBlock::Text(t) = chunk.content {

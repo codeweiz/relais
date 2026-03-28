@@ -143,6 +143,70 @@ impl ClaudeAcpBridge {
         let sdk = ClaudeSdk::spawn(&self.cwd, self.system_prompt.as_deref(), None)
             .await
             .map_err(|e| acp::Error::new(-32603, e))?;
+
+        // Drain startup events until we receive the initialize control_response (which
+        // carries the slash commands list).  Claude emits several `system/hook_*` messages
+        // first, so we keep looping until we see a SystemInit with non-empty commands.
+        // We give it up to 10 s — after that we continue without slash commands.
+        let notif_tx = self.notif_tx.clone();
+        let acp_session_id = self.acp_session_id.clone();
+        let timeout_dur = std::time::Duration::from_secs(10);
+        let init_result = tokio::time::timeout(timeout_dur, async {
+            loop {
+                match sdk.recv_event().await {
+                    Some(SdkEvent::SystemInit { slash_commands, .. }) => {
+                        if !slash_commands.is_empty() {
+                            // Got the real command list — emit and stop draining.
+                            let commands: Vec<acp::AvailableCommand> = slash_commands
+                                .iter()
+                                .map(|(name, desc)| {
+                                    acp::AvailableCommand::new(name.clone(), desc.as_str())
+                                })
+                                .collect();
+                            let notif = acp::SessionNotification::new(
+                                acp_session_id.clone(),
+                                acp::SessionUpdate::AvailableCommandsUpdate(
+                                    acp::AvailableCommandsUpdate::new(commands),
+                                ),
+                            );
+                            let _ = notif_tx.send(notif).await;
+                            return Ok(());
+                        }
+                        // Empty SystemInit from hook_started / hook_response — keep waiting.
+                    }
+                    Some(SdkEvent::ControlHandled { .. }) => {
+                        // Informational only — keep draining.
+                    }
+                    Some(other) => {
+                        // Unexpected event (e.g. TurnResult on resume) — stop draining so
+                        // it can be handled by drain_until_turn_result later.
+                        tracing::warn!(
+                            "[claude-bridge] unexpected event during init drain: {:?}",
+                            other
+                        );
+                        return Ok(());
+                    }
+                    None => {
+                        return Err(acp::Error::new(
+                            -32603,
+                            "SDK event stream ended during init drain",
+                        ));
+                    }
+                }
+            }
+        })
+        .await;
+
+        match init_result {
+            Ok(result) => result?,
+            Err(_) => {
+                // Timeout — not fatal; slash commands will simply be absent.
+                tracing::warn!(
+                    "[claude-bridge] timed out waiting for init control_response; slash commands may be missing"
+                );
+            }
+        }
+
         *lock = Some(sdk);
         Ok(())
     }
@@ -183,7 +247,9 @@ impl ClaudeAcpBridge {
                     if !slash_commands.is_empty() {
                         let commands: Vec<acp::AvailableCommand> = slash_commands
                             .iter()
-                            .map(|name| acp::AvailableCommand::new(name.clone(), ""))
+                            .map(|(name, desc)| {
+                                acp::AvailableCommand::new(name.clone(), desc.as_str())
+                            })
                             .collect();
                         let notif = acp::SessionNotification::new(
                             session_id.to_string(),

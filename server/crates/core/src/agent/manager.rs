@@ -89,14 +89,15 @@ impl AgentManager {
         let mut backend = AcpBackend::new(kind.clone());
         let created_at = Utc::now();
 
+        // Subscribe to the broadcast channel BEFORE starting the backend so that
+        // any events emitted during initialization (e.g. AvailableCommands from the
+        // initialize control_response) are captured by the event router.
+        let event_history: Arc<Mutex<Vec<AgentEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        self.start_event_router(session_id.clone(), &backend, event_history.clone());
+
         // Attempt to start the backend. On failure, register in crashed state.
         match backend.start(&cwd, None).await {
             Ok(()) => {
-                let event_history: Arc<Mutex<Vec<AgentEvent>>> = Arc::new(Mutex::new(Vec::new()));
-
-                // Start event router that bridges backend events to the event bus.
-                self.start_event_router(session_id.clone(), &backend, event_history.clone());
-
                 let managed = ManagedAgent {
                     backend,
                     name: name.to_string(),
@@ -134,7 +135,9 @@ impl AgentManager {
                     created_at,
                     restart_count: 0,
                     companion_terminal_id: None,
-                    event_history: Arc::new(Mutex::new(Vec::new())),
+                    // Reuse the already-subscribed event_history so the router
+                    // drains cleanly even when the agent fails to start.
+                    event_history,
                 };
 
                 self.agents.insert(session_id.clone(), managed);
@@ -299,18 +302,26 @@ impl AgentManager {
             loop {
                 match rx.recv().await {
                     Ok(event) => {
-                        // AvailableCommands is metadata — broadcast but don't persist in history
-                        let skip_history = matches!(event, AgentEvent::AvailableCommands(_));
-                        if !skip_history {
+                        // AvailableCommands: store in history (replace any previous entry)
+                        // so reconnecting clients always receive the latest slash commands.
+                        // Do NOT increment seq — it's metadata, not a conversational event.
+                        let is_available_commands =
+                            matches!(event, AgentEvent::AvailableCommands(_));
+                        if is_available_commands {
+                            if let Ok(mut history) = event_history.lock() {
+                                // Remove any stale AvailableCommands entry and add the fresh one.
+                                history
+                                    .retain(|e| !matches!(e, AgentEvent::AvailableCommands(_)));
+                                history.push(event.clone());
+                            }
+                        } else {
                             if let Ok(mut history) = event_history.lock() {
                                 history.push(event.clone());
                             }
+                            seq += 1;
                         }
 
                         let data_event = agent_event_to_data_event(seq, &event);
-                        if !skip_history {
-                            seq += 1;
-                        }
                         event_bus.publish_data(&sid, data_event).await;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
