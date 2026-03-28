@@ -68,15 +68,19 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
 
     if (text.startsWith('/') && !text.contains(' ')) {
       final filter = text.substring(1);
-      final commands = session.availableCommands;
-      if (commands == null) return;
+      final dynamic = session.availableCommands ?? [];
+      final builtins = ref.read(settingsProvider).builtinSlashCommands
+          .map((m) => SlashCommand(name: m['name']!, description: m['description']!))
+          .toList();
+      final dynamicNames = dynamic.map((c) => c.name).toSet();
+      final merged = [...dynamic, ...builtins.where((c) => !dynamicNames.contains(c.name))];
 
       if (!_showingMenu) {
         _showingMenu = true;
         _menuController.show(
           context: context,
           layerLink: _layerLink,
-          commands: commands,
+          commands: merged,
           filter: filter,
           onSelect: _onCommandSelected,
           onDismiss: _onMenuDismissed,
@@ -85,7 +89,7 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
         _menuController.updateFilter(
           context: context,
           layerLink: _layerLink,
-          commands: commands,
+          commands: merged,
           filter: filter,
           onSelect: _onCommandSelected,
           onDismiss: _onMenuDismissed,

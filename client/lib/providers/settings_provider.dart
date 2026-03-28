@@ -1,7 +1,28 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../l10n/strings.dart';
+
+const _kDefaultBuiltinCommands = [
+  {'name': 'help', 'description': 'Show help'},
+  {'name': 'model', 'description': 'Change model'},
+  {'name': 'clear', 'description': 'Clear conversation'},
+  {'name': 'login', 'description': 'Login'},
+  {'name': 'logout', 'description': 'Logout'},
+  {'name': 'doctor', 'description': 'Health check'},
+  {'name': 'status', 'description': 'Show session status'},
+  {'name': 'permissions', 'description': 'Manage permissions'},
+  {'name': 'memory', 'description': 'Memory management'},
+  {'name': 'mcp', 'description': 'MCP server management'},
+  {'name': 'add-dir', 'description': 'Add directory'},
+  {'name': 'fast', 'description': 'Toggle fast mode'},
+  {'name': 'effort', 'description': 'Set effort level'},
+  {'name': 'terminal', 'description': 'Open terminal'},
+  {'name': 'vim', 'description': 'Vim mode'},
+  {'name': 'listen', 'description': 'Listen mode'},
+  {'name': 'bug', 'description': 'Report a bug'},
+];
 
 class AppSettings {
   final ThemeMode themeMode;
@@ -9,6 +30,7 @@ class AppSettings {
   final bool terminalCursorBlink;
   final String defaultAgentProvider;
   final String locale;
+  final List<Map<String, String>> builtinSlashCommands;
 
   const AppSettings({
     this.themeMode = ThemeMode.system,
@@ -16,6 +38,7 @@ class AppSettings {
     this.terminalCursorBlink = true,
     this.defaultAgentProvider = 'claude-code',
     this.locale = 'zh',
+    this.builtinSlashCommands = const [],
   });
 
   AppSettings copyWith({
@@ -24,6 +47,7 @@ class AppSettings {
     bool? terminalCursorBlink,
     String? defaultAgentProvider,
     String? locale,
+    List<Map<String, String>>? builtinSlashCommands,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -31,6 +55,7 @@ class AppSettings {
       terminalCursorBlink: terminalCursorBlink ?? this.terminalCursorBlink,
       defaultAgentProvider: defaultAgentProvider ?? this.defaultAgentProvider,
       locale: locale ?? this.locale,
+      builtinSlashCommands: builtinSlashCommands ?? this.builtinSlashCommands,
     );
   }
 }
@@ -44,12 +69,25 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     final locale = prefs.getString('locale') ?? 'zh';
     S.locale = locale;
+    final builtinJson = prefs.getString('builtin_slash_commands');
+    final List<Map<String, String>> builtinCmds;
+    if (builtinJson != null) {
+      final decoded = jsonDecode(builtinJson) as List<dynamic>;
+      builtinCmds = decoded
+          .map((e) => Map<String, String>.from(e as Map))
+          .toList();
+    } else {
+      builtinCmds = List<Map<String, String>>.from(
+        _kDefaultBuiltinCommands.map((m) => Map<String, String>.from(m)),
+      );
+    }
     state = AppSettings(
       themeMode: _parseThemeMode(prefs.getString('theme_mode') ?? 'system'),
       fontSize: prefs.getDouble('terminal_font_size') ?? 14.0,
       terminalCursorBlink: prefs.getBool('terminal_cursor_blink') ?? true,
       defaultAgentProvider: prefs.getString('default_agent_provider') ?? 'claude-code',
       locale: locale,
+      builtinSlashCommands: builtinCmds,
     );
   }
 
@@ -82,6 +120,30 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = state.copyWith(locale: locale);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('locale', locale);
+  }
+
+  Future<void> addBuiltinSlashCommand(String name, String description) async {
+    final updated = [
+      ...state.builtinSlashCommands,
+      {'name': name, 'description': description},
+    ];
+    state = state.copyWith(builtinSlashCommands: updated);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('builtin_slash_commands', jsonEncode(updated));
+  }
+
+  Future<void> removeBuiltinSlashCommand(int index) async {
+    final updated = List<Map<String, String>>.from(state.builtinSlashCommands)
+      ..removeAt(index);
+    state = state.copyWith(builtinSlashCommands: updated);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('builtin_slash_commands', jsonEncode(updated));
+  }
+
+  Future<void> setBuiltinSlashCommands(List<Map<String, String>> commands) async {
+    state = state.copyWith(builtinSlashCommands: commands);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('builtin_slash_commands', jsonEncode(commands));
   }
 
   Future<void> clearSavedServers() async {

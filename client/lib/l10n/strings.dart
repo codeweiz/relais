@@ -59,5 +59,9 @@ class S {
   static String get statusThinking => _t('思考中', 'Thinking');
   static String get statusToolCalling => _t('调用工具', 'Calling tool');
   static String get statusError => _t('错误', 'Error');
+  static String get builtinSlashCommands => _t('内置斜杠命令', 'Built-in Slash Commands');
+  static String get addCommand => _t('添加命令', 'Add Command');
+  static String get commandName => _t('命令名称', 'Command Name');
+  static String get commandDescription => _t('命令描述', 'Command Description');
   static String _t(String zh, String en) => locale == 'zh' ? zh : en;
 }
