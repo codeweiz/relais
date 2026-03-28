@@ -63,6 +63,11 @@ pub enum ControlEvent {
         plugin_id: PluginId,
         error: String,
     },
+    AgentActivityChanged {
+        session_id: SessionId,
+        status: String,
+        activity: String,
+    },
 }
 
 /// Data events sent through per-session mpsc channels.

@@ -24,6 +24,7 @@ pub struct CoreState {
     pub task_pool: Arc<task_pool::pool::TaskPool>,
     /// Handle to the background task dispatcher (dropped on shutdown).
     pub task_dispatcher_handle: Option<task_pool::scheduler::DispatcherHandle>,
+    pub status_registry: Arc<agent::status_registry::AgentStatusRegistry>,
 }
 
 impl CoreState {
@@ -44,7 +45,12 @@ impl CoreState {
             Arc::clone(&config),
         ));
 
-        let agent_manager = Arc::new(agent::manager::AgentManager::new(Arc::clone(&event_bus)));
+        let status_registry = Arc::new(agent::status_registry::AgentStatusRegistry::new());
+
+        let agent_manager = Arc::new(agent::manager::AgentManager::new(
+            Arc::clone(&event_bus),
+            Arc::clone(&status_registry),
+        ));
 
         // Task pool backed by ~/.relais/tasks.jsonl
         let tasks_path = config::Config::relais_dir()
@@ -71,6 +77,7 @@ impl CoreState {
             agent_manager,
             task_pool,
             task_dispatcher_handle: Some(dispatcher_handle),
+            status_registry,
         })
     }
 }

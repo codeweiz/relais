@@ -208,6 +208,18 @@ fn control_event_to_json(event: &ControlEvent) -> Option<String> {
                 "error": error,
             })
         }
+        ControlEvent::AgentActivityChanged {
+            session_id,
+            status,
+            activity,
+        } => {
+            serde_json::json!({
+                "type": "agent_activity",
+                "session_id": session_id,
+                "status": status,
+                "activity": activity,
+            })
+        }
     };
 
     Some(json.to_string())

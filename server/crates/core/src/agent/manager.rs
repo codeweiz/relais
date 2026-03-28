@@ -16,6 +16,7 @@ use crate::events::{AgentStatus, ControlEvent, DataEvent, ErrorClass, SessionId}
 
 use super::acp_backend::AcpBackend;
 use super::event::{AgentEvent, AgentKind};
+use super::status_registry::{AgentActivity, AgentStatusRegistry};
 
 /// Maximum number of automatic restarts before giving up.
 /// Used by the event router when detecting agent crashes (Issue #2 auto-restart).
@@ -53,14 +54,17 @@ pub struct AgentManager {
     agents: DashMap<SessionId, ManagedAgent>,
     /// Event bus for publishing control/data events.
     event_bus: Arc<EventBus>,
+    /// Registry tracking real-time activity status of all agents.
+    status_registry: Arc<AgentStatusRegistry>,
 }
 
 impl AgentManager {
     /// Create a new agent manager.
-    pub fn new(event_bus: Arc<EventBus>) -> Self {
+    pub fn new(event_bus: Arc<EventBus>, status_registry: Arc<AgentStatusRegistry>) -> Self {
         Self {
             agents: DashMap::new(),
             event_bus,
+            status_registry,
         }
     }
 
@@ -110,6 +114,7 @@ impl AgentManager {
                 };
 
                 self.agents.insert(session_id.clone(), managed);
+                self.status_registry.register(&session_id, name, provider);
 
                 // Publish session creation event
                 self.event_bus
@@ -141,6 +146,7 @@ impl AgentManager {
                 };
 
                 self.agents.insert(session_id.clone(), managed);
+                self.status_registry.register(&session_id, name, provider);
 
                 self.event_bus
                     .publish_control(ControlEvent::AgentStatusChanged {
@@ -213,6 +219,7 @@ impl AgentManager {
         if let Some(mut entry) = self.agents.get_mut(session_id) {
             entry.value_mut().backend.shutdown().await;
             drop(entry);
+            self.status_registry.unregister(session_id);
             self.agents.remove(session_id);
             info!(session_id = %session_id, "agent killed");
             Ok(())
@@ -295,6 +302,8 @@ impl AgentManager {
     ) {
         let mut rx = backend.subscribe();
         let event_bus = self.event_bus.clone();
+        let status_registry = self.status_registry.clone();
+        let event_bus_for_status = self.event_bus.clone();
         let sid = session_id.clone();
         let mut seq: u64 = 1;
 
@@ -323,6 +332,54 @@ impl AgentManager {
 
                         let data_event = agent_event_to_data_event(seq, &event);
                         event_bus.publish_data(&sid, data_event).await;
+
+                        // Update status registry and broadcast activity change
+                        let (activity_status, activity_text, event_cost) = match &event {
+                            AgentEvent::Text(content) => {
+                                let summary: String = content.chars().take(50).collect();
+                                (AgentActivity::Working, summary, None)
+                            }
+                            AgentEvent::Thinking(_) => {
+                                (AgentActivity::Thinking, "Thinking...".to_string(), None)
+                            }
+                            AgentEvent::ToolUse { name, .. } => {
+                                (AgentActivity::ToolCalling, format!("Using: {}", name), None)
+                            }
+                            AgentEvent::ToolResult { .. } => {
+                                (AgentActivity::Working, "Processing result...".to_string(), None)
+                            }
+                            AgentEvent::TurnComplete { cost_usd, .. } => {
+                                (AgentActivity::Idle, String::new(), *cost_usd)
+                            }
+                            AgentEvent::Error(msg) => {
+                                let summary: String = msg.chars().take(80).collect();
+                                (AgentActivity::Error, summary, None)
+                            }
+                            AgentEvent::UserMessage { .. } => {
+                                (AgentActivity::Working, "Processing message...".to_string(), None)
+                            }
+                            AgentEvent::AvailableCommands(_) | AgentEvent::Progress(_) => {
+                                (AgentActivity::Working, String::new(), None)
+                            }
+                        };
+
+                        if !activity_text.is_empty() || matches!(activity_status, AgentActivity::Idle) {
+                            let changed = status_registry.update(
+                                &sid,
+                                activity_status.clone(),
+                                &activity_text,
+                                event_cost,
+                            );
+                            if changed {
+                                event_bus_for_status.publish_control(
+                                    ControlEvent::AgentActivityChanged {
+                                        session_id: sid.clone(),
+                                        status: activity_status.to_string(),
+                                        activity: activity_text,
+                                    },
+                                );
+                            }
+                        }
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
                         warn!(session_id = %sid, skipped = n, "event router lagged, some events lost");
