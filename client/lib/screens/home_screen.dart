@@ -2,10 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../models/agent_status.dart';
 import '../models/session.dart';
 import '../models/task.dart';
+import '../providers/agent_provider.dart';
 import '../providers/agent_status_provider.dart';
 import '../providers/server_provider.dart';
 import '../providers/session_provider.dart';
@@ -141,6 +143,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     );
   }
 
+  void _showQuickMessage(AgentStatusInfo agent) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _QuickMessageSheet(
+        agentName: agent.name,
+        sessionId: agent.sessionId,
+        onSend: (text) {
+          final server = ref.read(serverProvider).server;
+          if (server == null) return;
+          final session = ref.read(agentSessionManagerProvider).getOrCreate(
+            sessionId: agent.sessionId,
+            baseUrl: server.url,
+            token: server.token,
+          );
+          session.sendMessage(text);
+          Navigator.of(ctx).pop();
+        },
+      ),
+    );
+  }
+
   // ── Bubble expand/collapse ────────────────────────────────────────────────
 
   void _toggleBubble(String sessionId) {
@@ -241,12 +265,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     height: slotSize.height,
                     child: Stack(
                       children: [
-                        // Main agent area — tap or long press = navigate to chat
+                        // Main agent area — tap = navigate to chat, long press = quick message
                         GestureDetector(
                           onTap: () =>
                               context.push('/agent/${agent.sessionId}'),
-                          onLongPress: () =>
-                              context.push('/agent/${agent.sessionId}'),
+                          onLongPress: () => _showQuickMessage(agent),
                           child: CustomPaint(
                             painter: AgentPainter(
                               agent: displayAgent,
@@ -524,6 +547,147 @@ class _PanelTab extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Quick message bottom sheet ────────────────────────────────────────────────
+
+class _QuickMessageSheet extends StatefulWidget {
+  final String agentName;
+  final String sessionId;
+  final ValueChanged<String> onSend;
+
+  const _QuickMessageSheet({
+    required this.agentName,
+    required this.sessionId,
+    required this.onSend,
+  });
+
+  @override
+  State<_QuickMessageSheet> createState() => _QuickMessageSheetState();
+}
+
+class _QuickMessageSheetState extends State<_QuickMessageSheet> {
+  final _inputController = TextEditingController();
+  final _speech = stt.SpeechToText();
+  bool _isListening = false;
+
+  @override
+  void dispose() {
+    _speech.stop();
+    _inputController.dispose();
+    super.dispose();
+  }
+
+  void _send() {
+    final text = _inputController.text.trim();
+    if (text.isEmpty) return;
+    if (_isListening) {
+      _speech.cancel();
+      _isListening = false;
+    }
+    widget.onSend(text);
+  }
+
+  Future<void> _toggleVoice() async {
+    if (_isListening) {
+      await _speech.stop();
+      setState(() => _isListening = false);
+      return;
+    }
+    final available = await _speech.initialize(
+      onError: (_) => setState(() => _isListening = false),
+    );
+    if (!available) return;
+    setState(() => _isListening = true);
+    await _speech.listen(
+      localeId: 'zh-CN',
+      onResult: (result) {
+        if (!_isListening) return;
+        _inputController.text = result.recognizedWords;
+        _inputController.selection = TextSelection.collapsed(
+          offset: _inputController.text.length,
+        );
+        if (result.finalResult) {
+          setState(() => _isListening = false);
+        }
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 8),
+          Center(
+            child: Container(
+              width: 32,
+              height: 4,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Text(
+              _t('发送给 ${widget.agentName}', 'Send to ${widget.agentName}'),
+              style: theme.textTheme.titleMedium,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: SafeArea(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _inputController,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: S.sendMessage,
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        isDense: true,
+                      ),
+                      onSubmitted: (_) => _send(),
+                      textInputAction: TextInputAction.send,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    onPressed: _toggleVoice,
+                    icon: Icon(
+                      _isListening ? Icons.mic : Icons.mic_none,
+                      color: _isListening
+                          ? theme.colorScheme.error
+                          : null,
+                    ),
+                    tooltip: _isListening ? '停止' : '语音输入',
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton.filled(
+                    onPressed: _send,
+                    icon: const Icon(Icons.send),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _t(String zh, String en) => S.locale == 'zh' ? zh : en;
 }
 
 class _TaskRow extends StatelessWidget {
