@@ -106,9 +106,11 @@ pub async fn list_sessions(State(state): State<AppState>) -> impl IntoResponse {
         });
     }
 
-    // Agent sessions
+    // Agent sessions (running in-memory)
     let agents = state.core.agent_manager.list_agents();
+    let mut seen_agent_ids = std::collections::HashSet::new();
     for (agent_id, agent_name, agent_status, agent_created_at) in agents {
+        seen_agent_ids.insert(agent_id.clone());
         let status = match agent_status {
             AgentStatus::Initializing => "initializing",
             AgentStatus::Ready => "ready",
@@ -131,6 +133,31 @@ pub async fn list_sessions(State(state): State<AppState>) -> impl IntoResponse {
             cols: 0,
             rows: 0,
         });
+    }
+
+    // Suspended agent sessions (persisted on disk, not yet in-memory)
+    if let Ok(stored_sessions) = state.core.session_store.list() {
+        use relais_core::session::types::{SessionStatus, SessionType};
+        for meta in stored_sessions {
+            if matches!(meta.session_type, SessionType::Agent)
+                && meta.status == SessionStatus::Suspended
+                && !seen_agent_ids.contains(&meta.id)
+            {
+                list.push(SessionInfo {
+                    id: meta.id,
+                    name: meta.name,
+                    kind: "agent".to_string(),
+                    status: "suspended".to_string(),
+                    parent_id: meta.parent_id,
+                    created_at: meta.created_at.to_rfc3339(),
+                    last_active: meta.last_active.to_rfc3339(),
+                    exit_code: None,
+                    shell: None,
+                    cols: 0,
+                    rows: 0,
+                });
+            }
+        }
     }
 
     Json(list)
@@ -274,6 +301,17 @@ pub async fn delete_session(
 pub struct SessionInputRequest {
     /// Text input to write to the session's PTY stdin.
     pub data: String,
+}
+
+/// GET /api/v1/providers — list available agent providers.
+pub async fn list_providers(State(state): State<AppState>) -> impl IntoResponse {
+    let providers: Vec<serde_json::Value> = state.core.config.agent.providers.iter()
+        .map(|p| serde_json::json!({
+            "id": p.id,
+            "name": p.name,
+        }))
+        .collect();
+    Json(providers)
 }
 
 /// POST /api/v1/sessions/:id/input — write input to a session's PTY.

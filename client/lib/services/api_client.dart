@@ -96,6 +96,12 @@ class ApiClient {
     return resp.data as Map<String, dynamic>;
   }
 
+  Future<List<Map<String, dynamic>>> getProviders() async {
+    final resp = await _dio.get('/api/v1/providers');
+    final list = resp.data as List;
+    return list.cast<Map<String, dynamic>>();
+  }
+
   Future<void> cancelTask(String id) async {
     await _dio.delete('/api/v1/tasks/$id');
   }

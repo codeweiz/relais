@@ -38,6 +38,8 @@ fn api_routes() -> Router<AppState> {
         .route("/sessions", post(sessions::create_session))
         .route("/sessions/{id}", delete(sessions::delete_session))
         .route("/sessions/{id}/input", post(sessions::send_session_input))
+        // Providers
+        .route("/providers", get(sessions::list_providers))
         // Token
         .route("/token/rotate", post(token::rotate_token))
         // Tasks

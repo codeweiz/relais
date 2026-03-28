@@ -40,9 +40,17 @@ pub struct SessionConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderDef {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AgentConfig {
-    pub default_provider: String,
+    #[serde(default = "default_providers")]
+    pub providers: Vec<ProviderDef>,
     pub default_model: String,
     pub auto_approve_tools: bool,
     pub restart_max_attempts: u32,
@@ -99,7 +107,6 @@ pub struct WorkspaceConfig {
 /// Workspace-level agent overrides.
 #[derive(Debug, Clone, Deserialize)]
 pub struct WorkspaceAgentConfig {
-    pub default_provider: Option<String>,
     pub auto_approve_tools: Option<bool>,
     pub system_prompt: Option<String>,
 }
@@ -146,10 +153,18 @@ impl Default for SessionConfig {
     }
 }
 
+fn default_providers() -> Vec<ProviderDef> {
+    vec![
+        ProviderDef { id: "claude-code".into(), name: "Claude Code".into(), command: "claude".into() },
+        ProviderDef { id: "codex".into(), name: "Codex CLI".into(), command: "codex".into() },
+        ProviderDef { id: "gemini".into(), name: "Gemini CLI".into(), command: "gemini".into() },
+    ]
+}
+
 impl Default for AgentConfig {
     fn default() -> Self {
         Self {
-            default_provider: "claude-code".to_string(),
+            providers: default_providers(),
             default_model: String::new(),
             auto_approve_tools: false,
             restart_max_attempts: 3,
@@ -418,9 +433,6 @@ impl Config {
         }
 
         // Agent overrides
-        if let Ok(v) = std::env::var("RELAIS_AGENT_DEFAULT_PROVIDER") {
-            self.agent.default_provider = v;
-        }
         if let Ok(v) = std::env::var("RELAIS_AGENT_DEFAULT_MODEL") {
             self.agent.default_model = v;
         }
@@ -526,9 +538,6 @@ impl Config {
     pub fn merge_workspace(&self, ws: &WorkspaceConfig) -> Config {
         let mut merged = self.clone();
         if let Some(ref agent) = ws.agent {
-            if let Some(ref p) = agent.default_provider {
-                merged.agent.default_provider = p.clone();
-            }
             if let Some(v) = agent.auto_approve_tools {
                 merged.agent.auto_approve_tools = v;
             }

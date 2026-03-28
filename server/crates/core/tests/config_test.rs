@@ -20,7 +20,12 @@ fn test_default_config() {
     assert_eq!(cfg.session.session_id_length, 12);
 
     // Agent defaults
-    assert_eq!(cfg.agent.default_provider, "claude-code");
+    assert_eq!(cfg.agent.providers.len(), 3);
+    assert_eq!(cfg.agent.providers[0].id, "claude-code");
+    assert_eq!(cfg.agent.providers[0].name, "Claude Code");
+    assert_eq!(cfg.agent.providers[0].command, "claude");
+    assert_eq!(cfg.agent.providers[1].id, "codex");
+    assert_eq!(cfg.agent.providers[2].id, "gemini");
     assert_eq!(cfg.agent.default_model, "");
     assert_eq!(cfg.agent.auto_approve_tools, false);
     assert_eq!(cfg.agent.restart_max_attempts, 3);
@@ -68,7 +73,6 @@ max_storage_mb = 512
 session_id_length = 16
 
 [agent]
-default_provider = "openai"
 default_model = "gpt-4"
 auto_approve_tools = true
 restart_max_attempts = 5
@@ -105,7 +109,6 @@ max_message_size_bytes = 2097152
     assert_eq!(cfg.server.shell, "/bin/bash");
     assert_eq!(cfg.security.ip_whitelist, vec!["192.168.1.0/24"]);
     assert_eq!(cfg.session.max_age_days, 7);
-    assert_eq!(cfg.agent.default_provider, "openai");
     assert_eq!(cfg.agent.default_model, "gpt-4");
     assert_eq!(cfg.agent.auto_approve_tools, true);
     assert_eq!(cfg.agent.restart_max_attempts, 5);
@@ -149,7 +152,8 @@ port = 9999
     assert_eq!(cfg.server.host, "127.0.0.1");
     assert_eq!(cfg.server.shell, "/bin/zsh");
     assert_eq!(cfg.session.max_age_days, 30);
-    assert_eq!(cfg.agent.default_provider, "claude-code");
+    assert_eq!(cfg.agent.providers.len(), 3);
+    assert_eq!(cfg.agent.providers[0].id, "claude-code");
     assert_eq!(cfg.logging.level, "info");
     assert_eq!(cfg.plugins.dir, "~/.relais/plugins");
 }
