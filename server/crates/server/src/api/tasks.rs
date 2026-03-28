@@ -29,6 +29,12 @@ pub struct AddTaskRequest {
     /// IDs of tasks this task depends on.
     #[serde(default)]
     pub depends_on: Vec<String>,
+    /// Target agent name for dispatch (@ task dispatch).
+    #[serde(default)]
+    pub target_agent: Option<String>,
+    /// Session ID of the dispatching agent (for completion callback).
+    #[serde(default)]
+    pub source_session_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -49,6 +55,10 @@ pub struct TaskInfo {
     pub started_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_agent: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -79,6 +89,8 @@ pub async fn list_tasks(State(state): State<AppState>) -> impl IntoResponse {
             created_at: t.created_at.to_rfc3339(),
             started_at: t.started_at.map(|dt| dt.to_rfc3339()),
             completed_at: t.completed_at.map(|dt| dt.to_rfc3339()),
+            target_agent: t.target_agent,
+            session_id: t.session_id,
         })
         .collect();
     Json(infos)
@@ -114,6 +126,14 @@ pub async fn add_task(
         };
         // Store cwd in tags for now (target doesn't have a cwd field for agent)
         task.tags.push(format!("cwd:{}", cwd));
+    }
+
+    if let Some(agent) = body.target_agent {
+        task = task.with_target_agent(agent);
+    }
+
+    if let Some(source) = body.source_session_id {
+        task = task.with_source_session(source);
     }
 
     match state.core.task_pool.add(task).await {
@@ -324,6 +344,8 @@ pub async fn update_task(
             created_at: t.created_at.to_rfc3339(),
             started_at: t.started_at.map(|dt| dt.to_rfc3339()),
             completed_at: t.completed_at.map(|dt| dt.to_rfc3339()),
+            target_agent: t.target_agent,
+            session_id: t.session_id,
         })
         .into_response(),
         None => (
