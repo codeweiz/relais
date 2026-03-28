@@ -32,6 +32,9 @@ pub struct AddTaskRequest {
     /// Target agent name for dispatch (@ task dispatch).
     #[serde(default)]
     pub target_agent: Option<String>,
+    /// Agent provider type (e.g. "codex", "gemini") for spawning a new agent.
+    #[serde(default)]
+    pub provider: Option<String>,
     /// Session ID of the dispatching agent (for completion callback).
     #[serde(default)]
     pub source_session_id: Option<String>,
@@ -132,19 +135,36 @@ pub async fn add_task(
         task = task.with_target_agent(agent);
     }
 
+    if let Some(provider) = body.provider {
+        task = task.with_provider(provider);
+    }
+
     if let Some(source) = body.source_session_id {
         task = task.with_source_session(source);
     }
 
+    let task_name = task.name.clone();
+    let task_target_agent = task.target_agent.clone();
+
     match state.core.task_pool.add(task).await {
-        Ok(id) => (
-            StatusCode::CREATED,
-            Json(AddTaskResponse {
-                id,
-                status: "queued".to_string(),
-            }),
-        )
-            .into_response(),
+        Ok(id) => {
+            // Notify clients so they can refresh the task list
+            state.core.event_bus.publish_control(
+                relais_core::events::ControlEvent::TaskAdded {
+                    task_id: id.clone(),
+                    name: task_name,
+                    target_agent: task_target_agent,
+                },
+            );
+            (
+                StatusCode::CREATED,
+                Json(AddTaskResponse {
+                    id,
+                    status: "queued".to_string(),
+                }),
+            )
+                .into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorBody {

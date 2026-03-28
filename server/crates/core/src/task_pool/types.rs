@@ -156,6 +156,9 @@ pub struct Task {
     /// Name of the agent this task is assigned to. None = unassigned.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_agent: Option<String>,
+    /// Agent provider type (e.g. "codex", "gemini") — used to spawn a new agent of that type.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
     /// Session ID of the agent that dispatched this task (for completion notification).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_session_id: Option<String>,
@@ -183,6 +186,7 @@ impl Task {
             completed_at: None,
             session_id: None,
             target_agent: None,
+            provider: None,
             source_session_id: None,
             result: None,
         }
@@ -216,6 +220,13 @@ impl Task {
     pub fn with_target_agent(mut self, name: impl Into<String>) -> Self {
         let name = name.into();
         self.target_agent = if name.is_empty() { None } else { Some(name) };
+        self
+    }
+
+    /// Set the agent provider type for spawning a new agent.
+    pub fn with_provider(mut self, provider: impl Into<String>) -> Self {
+        let p = provider.into();
+        self.provider = if p.is_empty() { None } else { Some(p) };
         self
     }
 

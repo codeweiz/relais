@@ -80,6 +80,7 @@ class ApiClient {
     String prompt = '',
     String priority = 'p1',
     String? targetAgent,
+    String? provider,
     String? sourceSessionId,
     String? cwd,
   }) async {
@@ -88,6 +89,7 @@ class ApiClient {
       if (prompt.isNotEmpty) 'prompt': prompt,
       'priority': priority,
       if (targetAgent != null) 'target_agent': targetAgent,
+      if (provider != null) 'provider': provider,
       if (sourceSessionId != null) 'source_session_id': sourceSessionId,
       if (cwd != null) 'cwd': cwd,
     });

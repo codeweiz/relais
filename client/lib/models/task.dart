@@ -8,6 +8,7 @@ class TaskInfo {
   final String? startedAt;
   final String? completedAt;
   final String? targetAgent;
+  final String? provider;
   final String? sessionId;
 
   const TaskInfo({
@@ -20,6 +21,7 @@ class TaskInfo {
     this.startedAt,
     this.completedAt,
     this.targetAgent,
+    this.provider,
     this.sessionId,
   });
 
@@ -36,6 +38,7 @@ class TaskInfo {
         startedAt: json['started_at'] as String?,
         completedAt: json['completed_at'] as String?,
         targetAgent: json['target_agent'] as String?,
+        provider: json['provider'] as String?,
         sessionId: json['session_id'] as String?,
       );
 

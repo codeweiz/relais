@@ -41,7 +41,7 @@ class TaskNotifier extends StateNotifier<List<TaskInfo>> {
           final json = jsonDecode(data) as Map<String, dynamic>;
           final type = json['type'] as String?;
           // Refresh task list when tasks change
-          if (type == 'task_completed' || type == 'session_created') {
+          if (type == 'task_added' || type == 'task_completed' || type == 'session_created') {
             refresh();
           }
         }
@@ -73,6 +73,7 @@ class TaskNotifier extends StateNotifier<List<TaskInfo>> {
     String prompt = '',
     String priority = 'p1',
     String? targetAgent,
+    String? provider,
     String? sourceSessionId,
     String? cwd,
   }) async {
@@ -84,6 +85,7 @@ class TaskNotifier extends StateNotifier<List<TaskInfo>> {
         prompt: prompt,
         priority: priority,
         targetAgent: targetAgent,
+        provider: provider,
         sourceSessionId: sourceSessionId,
         cwd: cwd,
       );
