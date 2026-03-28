@@ -148,6 +148,77 @@ impl ClaudeAcpBridge {
         Ok(())
     }
 
+    /// Drain the initial events produced by the Claude CLI right after startup.
+    ///
+    /// Claude emits a `control_response` for `req_init_1` very quickly (usually
+    /// within a few hundred milliseconds).  We poll with a short timeout so we
+    /// can forward the `AvailableCommandsUpdate` to the client immediately after
+    /// `initialize`, rather than waiting for the first `prompt` call.
+    async fn drain_init_events(&self) {
+        use tokio::time::{timeout, Duration};
+
+        // Give Claude up to 5 s to send the init control_response.
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+        let sid = self.acp_session_id.clone();
+
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+
+            // Receive one event while holding the lock, then release it before
+            // doing any async work (sending the notification) to avoid holding
+            // the mutex across an await that may block.
+            let event = {
+                let lock = self.sdk.lock().await;
+                let sdk = match lock.as_ref() {
+                    Some(s) => s,
+                    None => break,
+                };
+                timeout(Duration::from_millis(200), sdk.recv_event()).await
+            };
+
+            match event {
+                Ok(Some(SdkEvent::SystemInit { slash_commands, .. })) => {
+                    if !slash_commands.is_empty() {
+                        let commands: Vec<acp::AvailableCommand> = slash_commands
+                            .iter()
+                            .map(|(name, desc)| {
+                                acp::AvailableCommand::new(name.clone(), desc.as_str())
+                            })
+                            .collect();
+                        let notif = acp::SessionNotification::new(
+                            sid.clone(),
+                            acp::SessionUpdate::AvailableCommandsUpdate(
+                                acp::AvailableCommandsUpdate::new(commands),
+                            ),
+                        );
+                        let _ = self.notif_tx.send(notif).await;
+                        // Commands received — init drain complete.
+                        break;
+                    }
+                    // Empty SystemInit (session hook) — keep draining.
+                }
+                Ok(Some(SdkEvent::TurnResult { .. })) => {
+                    // Unexpected turn result during init — stop draining.
+                    break;
+                }
+                Ok(Some(_)) => {
+                    // Other events (ControlHandled, etc.) — keep draining.
+                }
+                Ok(None) => {
+                    // Event stream ended.
+                    break;
+                }
+                Err(_timeout) => {
+                    // No event in 200 ms — try again until deadline.
+                    continue;
+                }
+            }
+        }
+    }
+
     /// Translate SDK events into ACP notifications until a TurnResult arrives.
     async fn drain_until_turn_result(
         &self,
@@ -213,6 +284,14 @@ impl acp::Agent for ClaudeAcpBridge {
     ) -> acp::Result<acp::InitializeResponse> {
         tracing::info!("[claude-bridge] initialize called, spawning ClaudeSdk...");
         self.ensure_sdk().await?;
+        tracing::info!("[claude-bridge] ClaudeSdk spawned, draining init events...");
+        // Drain the initial events from the Claude CLI — the control_response to
+        // req_init_1 carries the slash commands list.  We collect all events up to
+        // (and including) the first SystemInit that carries non-empty commands, or
+        // until the event stream stalls (100 ms timeout).  Any events collected here
+        // are forwarded as ACP notifications so the client sees them right after
+        // connecting, without waiting for the first prompt.
+        self.drain_init_events().await;
         tracing::info!("[claude-bridge] initialize complete, ClaudeSdk ready");
         Ok(acp::InitializeResponse::new(acp::ProtocolVersion::V1))
     }

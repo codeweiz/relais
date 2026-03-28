@@ -63,6 +63,17 @@ class AgentSession {
         } else {
           session.messages.add(msg);
         }
+      } else if (msg.type == AgentMessageType.user) {
+        // Server echo of the user message: replace the optimistic entry if
+        // present so we don't show duplicates.
+        final optimisticIdx = session.messages.lastIndexWhere(
+          (m) => m.type == AgentMessageType.user && m.id.startsWith('user-optimistic-'),
+        );
+        if (optimisticIdx >= 0) {
+          session.messages[optimisticIdx] = msg;
+        } else {
+          session.messages.add(msg);
+        }
       } else {
         session.messages.add(msg);
       }
@@ -87,6 +98,16 @@ class AgentSession {
   }
 
   void sendMessage(String text) {
+    // Optimistically add the user message to the local list immediately so it
+    // appears in the UI without waiting for the server echo.
+    final optimistic = AgentMessage(
+      id: 'user-optimistic-${DateTime.now().millisecondsSinceEpoch}',
+      type: AgentMessageType.user,
+      content: text,
+      timestamp: DateTime.now(),
+      source: 'web',
+    );
+    messages.add(optimistic);
     waiting = true;
     connection.sendMessage(text);
     _notify();
