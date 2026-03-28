@@ -215,19 +215,20 @@ class _AgentScreenState extends ConsumerState<AgentScreen> {
       context: context,
       builder: (_) => DispatchDialog(
         agents: agentList,
-        onDispatch: (targetAgent, title, prompt, priority) async {
+        onDispatch: (targetAgent, provider, title, prompt, priority) async {
           final taskNotifier = ref.read(taskProvider.notifier);
           await taskNotifier.createTask(
             title: title,
             prompt: prompt.isEmpty ? title : prompt,
             priority: priority,
             targetAgent: targetAgent,
+            provider: provider,
             sourceSessionId: widget.sessionId,
           );
           _session!.messages.add(AgentMessage(
             id: 'dispatch-${DateTime.now().millisecondsSinceEpoch}',
             type: AgentMessageType.progress,
-            content: S.dispatched(targetAgent, title),
+            content: S.dispatched(targetAgent ?? provider ?? '', title),
             timestamp: DateTime.now(),
           ));
           if (mounted) setState(() {});

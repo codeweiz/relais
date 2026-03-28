@@ -55,12 +55,13 @@ class _OfficeScreenState extends ConsumerState<OfficeScreen>
       context: context,
       builder: (_) => DispatchDialog(
         agents: agents.values.toList(),
-        onDispatch: (targetAgent, title, prompt, priority) {
+        onDispatch: (targetAgent, provider, title, prompt, priority) {
           ref.read(taskProvider.notifier).createTask(
                 title: title,
                 prompt: prompt.isEmpty ? title : prompt,
                 priority: priority,
                 targetAgent: targetAgent,
+                provider: provider,
               );
         },
       ),
