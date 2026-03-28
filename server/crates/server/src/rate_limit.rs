@@ -255,8 +255,8 @@ mod tests {
         let ip1: IpAddr = "1.2.3.4".parse().unwrap();
         let ip2: IpAddr = "5.6.7.8".parse().unwrap();
 
-        // Auth limit is 5/min — consume all for ip1
-        for _ in 0..5 {
+        // Auth limit is 600/min — consume all for ip1
+        for _ in 0..600 {
             assert!(limiter.check(&ip1, RequestCategory::Auth));
         }
         assert!(!limiter.check(&ip1, RequestCategory::Auth));
